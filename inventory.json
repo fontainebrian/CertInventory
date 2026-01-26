@@ -42,13 +42,6 @@
         "DateAdded":  "2026-01-22 14:26:50"
     },
     {
-        "SerialNumber":  "036217213657",
-        "Model":  "",
-        "Location":  "Greenwood Village",
-        "IsLoaner":  true,
-        "DateAdded":  "2026-01-22 15:21:26"
-    },
-    {
         "SerialNumber":  "PF40XM8K",
         "Model":  "",
         "Location":  "Greenwood Village",
@@ -94,5 +87,54 @@
         "AssignedEmail":  "Brian.Fontaine@rsmus.com",
         "ManagerName":  "Sanchez, David",
         "ManagerEmail":  "David.Sanchez@rsmus.com"
+    },
+    {
+        "SerialNumber":  "018984513457",
+        "Model":  "",
+        "Location":  "Greenwood Village",
+        "IsLoaner":  false,
+        "DateAdded":  "2026-01-26 14:11:31"
+    },
+    {
+        "SerialNumber":  "019292513457",
+        "Model":  "",
+        "Location":  "Greenwood Village",
+        "IsLoaner":  false,
+        "DateAdded":  "2026-01-26 14:13:40"
+    },
+    {
+        "SerialNumber":  "0F37RD924103MR",
+        "Model":  "",
+        "Location":  "Greenwood Village",
+        "IsLoaner":  false,
+        "DateAdded":  "2026-01-26 14:14:47"
+    },
+    {
+        "SerialNumber":  "036729123257",
+        "Model":  "",
+        "Location":  "Greenwood Village",
+        "IsLoaner":  false,
+        "DateAdded":  "2026-01-26 14:17:05"
+    },
+    {
+        "SerialNumber":  "036217213657",
+        "Model":  "",
+        "Location":  "Greenwood Village",
+        "IsLoaner":  false,
+        "DateAdded":  "2026-01-26 14:18:33"
+    },
+    {
+        "SerialNumber":  "0F3BCDM24143MR",
+        "Model":  "",
+        "Location":  "Greenwood Village",
+        "IsLoaner":  false,
+        "DateAdded":  "2026-01-26 14:20:11"
+    },
+    {
+        "SerialNumber":  "040360113957",
+        "Model":  "",
+        "Location":  "Greenwood Village",
+        "IsLoaner":  false,
+        "DateAdded":  "2026-01-26 14:20:51"
     }
 ]

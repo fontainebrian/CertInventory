@@ -229,6 +229,24 @@ $dgvInventory.AllowUserToDeleteRows = $false
 $dgvInventory.ReadOnly = $true
 $dgvInventory.AutoSizeColumnsMode = "Fill"
 $dgvInventory.SelectionMode = "FullRowSelect"
+
+# Create context menu for copying serial number
+$contextMenuInventory = New-Object System.Windows.Forms.ContextMenuStrip
+$menuItemCopySerial = New-Object System.Windows.Forms.ToolStripMenuItem
+$menuItemCopySerial.Text = "Copy Serial Number"
+$menuItemCopySerial.Add_Click({
+    if ($dgvInventory.SelectedRows.Count -gt 0) {
+        $selectedRow = $dgvInventory.SelectedRows[0]
+        $serialNumber = $selectedRow.Cells["SerialNumber"].Value
+        if ($null -ne $serialNumber) {
+            [System.Windows.Forms.Clipboard]::SetText($serialNumber)
+            [System.Windows.Forms.MessageBox]::Show("Serial number copied to clipboard: $serialNumber", "Copied", "OK", "Information")
+        }
+    }
+})
+$contextMenuInventory.Items.Add($menuItemCopySerial) | Out-Null
+$dgvInventory.ContextMenuStrip = $contextMenuInventory
+
 $tabInventory.Controls.Add($dgvInventory)
 
 $btnRemoveLaptop = New-Object System.Windows.Forms.Button
