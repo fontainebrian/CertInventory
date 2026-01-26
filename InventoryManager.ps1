@@ -306,13 +306,16 @@ $lblLoanerList.Location = New-Object System.Drawing.Point(10, 20)
 $lblLoanerList.Size = New-Object System.Drawing.Size(150, 20)
 $tabLoaner.Controls.Add($lblLoanerList)
 
-# ListBox for loaner laptops
-$lstLoaners = New-Object System.Windows.Forms.ListBox
-$lstLoaners.Location = New-Object System.Drawing.Point(10, 45)
-$lstLoaners.Size = New-Object System.Drawing.Size(1135, 500)
-$lstLoaners.Font = New-Object System.Drawing.Font("Consolas", 9)
-$lstLoaners.SelectionMode = "One"
-$tabLoaner.Controls.Add($lstLoaners)
+# DataGridView for loaner laptops
+$dgvLoaners = New-Object System.Windows.Forms.DataGridView
+$dgvLoaners.Location = New-Object System.Drawing.Point(10, 45)
+$dgvLoaners.Size = New-Object System.Drawing.Size(1135, 500)
+$dgvLoaners.AllowUserToAddRows = $false
+$dgvLoaners.AllowUserToDeleteRows = $false
+$dgvLoaners.ReadOnly = $true
+$dgvLoaners.AutoSizeColumnsMode = "Fill"
+$dgvLoaners.SelectionMode = "FullRowSelect"
+$tabLoaner.Controls.Add($dgvLoaners)
 
 # Add Button
 $btnAddLoaner = New-Object System.Windows.Forms.Button
@@ -334,6 +337,13 @@ $btnRefreshLoaners.Text = "Refresh"
 $btnRefreshLoaners.Location = New-Object System.Drawing.Point(270, 555)
 $btnRefreshLoaners.Size = New-Object System.Drawing.Size(100, 30)
 $tabLoaner.Controls.Add($btnRefreshLoaners)
+
+# Check Status Button
+$btnCheckStatus = New-Object System.Windows.Forms.Button
+$btnCheckStatus.Text = "Check Status"
+$btnCheckStatus.Location = New-Object System.Drawing.Point(380, 555)
+$btnCheckStatus.Size = New-Object System.Drawing.Size(100, 30)
+$tabLoaner.Controls.Add($btnCheckStatus)
 
 # Add tabs to control
 $tabControl.TabPages.Add($tabImport)
@@ -1121,26 +1131,21 @@ $btnAddLoaner.Add_Click({
 
 # Remove Loaner button
 $btnRemoveLoaner.Add_Click({
-    if ($lstLoaners.SelectedIndex -eq -1) {
+    if ($dgvLoaners.SelectedRows.Count -eq 0) {
         [System.Windows.Forms.MessageBox]::Show("Please select a loaner laptop to remove.", "No Selection", "OK", "Warning")
         return
     }
     
-    # Parse the selected item to get serial number
-    $selectedItem = $lstLoaners.SelectedItem.ToString()
-    # Extract serial number (format: "Serial: XXXXXX | Location: YYYY")
-    if ($selectedItem -match "Serial: ([^|]+)") {
-        $selectedSerial = $matches[1].Trim()
-        
-        $result = [System.Windows.Forms.MessageBox]::Show("Are you sure you want to remove loaner laptop with serial number '$selectedSerial'?", "Confirm Removal", "YesNo", "Question")
-        
-        if ($result -eq "Yes") {
-            $script:inventory = @($script:inventory | Where-Object { $_.SerialNumber -ne $selectedSerial })
-            Save-Inventory
-            Update-LoanerList
-            Update-InventoryGrid
-            [System.Windows.Forms.MessageBox]::Show("Loaner laptop removed from inventory.", "Success", "OK", "Information")
-        }
+    $selectedSerial = $dgvLoaners.SelectedRows[0].Cells["SerialNumber"].Value
+    
+    $result = [System.Windows.Forms.MessageBox]::Show("Are you sure you want to remove loaner laptop with serial number '$selectedSerial'?", "Confirm Removal", "YesNo", "Question")
+    
+    if ($result -eq "Yes") {
+        $script:inventory = @($script:inventory | Where-Object { $_.SerialNumber -ne $selectedSerial })
+        Save-Inventory
+        Update-LoanerList
+        Update-InventoryGrid
+        [System.Windows.Forms.MessageBox]::Show("Loaner laptop removed from inventory.", "Success", "OK", "Information")
     }
 })
 
@@ -1149,23 +1154,111 @@ $btnRefreshLoaners.Add_Click({
     Update-LoanerList
 })
 
+# Check Status button
+$btnCheckStatus.Add_Click({
+    $script:inventory = @(Load-Inventory)
+    $loaners = $script:inventory | Where-Object { $_.IsLoaner -eq $true }
+    
+    if ($loaners.Count -eq 0) {
+        [System.Windows.Forms.MessageBox]::Show("No loaner laptops to check.", "No Loaners", "OK", "Information")
+        return
+    }
+    
+    $form.Cursor = [System.Windows.Forms.Cursors]::WaitCursor
+    $form.Refresh()
+    
+    # Create a hashtable to store ping results
+    $script:loanerStatus = @{}
+    
+    $counter = 0
+    foreach ($loaner in $loaners) {
+        $counter++
+        Write-Host "Checking $counter of $($loaners.Count): $($loaner.SerialNumber)"
+        
+        $status = "Offline"
+        try {
+            $pingTest = Test-Connection -ComputerName $loaner.SerialNumber -Count 1 -Quiet -ErrorAction Stop
+            if ($pingTest -eq $true) {
+                $status = "Online"
+            }
+        }
+        catch {
+            # Check if DNS error or just offline
+            if ($_.Exception.Message -like "*could not be resolved*" -or $_.Exception.Message -like "*host not found*") {
+                $status = "DNS Error"
+            } else {
+                $status = "Offline"
+            }
+        }
+        
+        $script:loanerStatus[$loaner.SerialNumber] = $status
+    }
+    
+    # Refresh the list with status
+    Update-LoanerList -IncludeStatus $true
+    
+    $form.Cursor = [System.Windows.Forms.Cursors]::Default
+    
+    $onlineCount = ($script:loanerStatus.Values | Where-Object { $_ -eq "Online" }).Count
+    $offlineCount = ($script:loanerStatus.Values | Where-Object { $_ -eq "Offline" }).Count
+    $dnsErrorCount = ($script:loanerStatus.Values | Where-Object { $_ -eq "DNS Error" }).Count
+    
+    [System.Windows.Forms.MessageBox]::Show("Status check complete!`n`nOnline: $onlineCount`nOffline: $offlineCount`nDNS Error: $dnsErrorCount", "Status Check Complete", "OK", "Information")
+})
+
 # Function to update loaner list
 function Update-LoanerList {
+    param(
+        [bool]$IncludeStatus = $false
+    )
+    
     $script:inventory = @(Load-Inventory)
-    $lstLoaners.Items.Clear()
     
     $loaners = $script:inventory | Where-Object { $_.IsLoaner -eq $true }
     
-    if ($loaners.Count -gt 0) {
-        foreach ($loaner in $loaners) {
-            $displayText = "Serial: $($loaner.SerialNumber.PadRight(20)) | Location: $($loaner.Location.PadRight(20)) | Added: $($loaner.DateAdded)"
-            if (![string]::IsNullOrWhiteSpace($loaner.Model)) {
-                $displayText = "Serial: $($loaner.SerialNumber.PadRight(20)) | Model: $($loaner.Model.PadRight(25)) | Location: $($loaner.Location.PadRight(20)) | Added: $($loaner.DateAdded)"
+    # Create DataTable for loaner laptops
+    $dt = New-Object System.Data.DataTable
+    $dt.Columns.Add("SerialNumber") | Out-Null
+    $dt.Columns.Add("Model") | Out-Null
+    $dt.Columns.Add("Location") | Out-Null
+    if ($IncludeStatus) {
+        $dt.Columns.Add("Status") | Out-Null
+    }
+    $dt.Columns.Add("DateAdded") | Out-Null
+    
+    foreach ($loaner in $loaners) {
+        $dr = $dt.NewRow()
+        $dr["SerialNumber"] = $loaner.SerialNumber
+        $dr["Model"] = if ([string]::IsNullOrWhiteSpace($loaner.Model)) { "" } else { $loaner.Model }
+        $dr["Location"] = $loaner.Location
+        
+        # Add status if available
+        if ($IncludeStatus) {
+            if ($script:loanerStatus -and $script:loanerStatus.ContainsKey($loaner.SerialNumber)) {
+                $dr["Status"] = $script:loanerStatus[$loaner.SerialNumber]
+            } else {
+                $dr["Status"] = "Unknown"
             }
-            $lstLoaners.Items.Add($displayText)
         }
-    } else {
-        $lstLoaners.Items.Add("No loaner laptops in inventory")
+        
+        $dr["DateAdded"] = $loaner.DateAdded
+        $dt.Rows.Add($dr)
+    }
+    
+    $dgvLoaners.DataSource = $dt
+    
+    # Color code rows based on status if status is included
+    if ($IncludeStatus) {
+        foreach ($row in $dgvLoaners.Rows) {
+            $status = $row.Cells["Status"].Value
+            if ($status -eq "Online") {
+                $row.DefaultCellStyle.BackColor = [System.Drawing.Color]::LightGreen
+            } elseif ($status -eq "Offline") {
+                $row.DefaultCellStyle.BackColor = [System.Drawing.Color]::LightCoral
+            } elseif ($status -eq "DNS Error") {
+                $row.DefaultCellStyle.BackColor = [System.Drawing.Color]::LightYellow
+            }
+        }
     }
 }
 

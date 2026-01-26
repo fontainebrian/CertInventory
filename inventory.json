@@ -82,5 +82,12 @@
         "Location":  "Salt Lake City",
         "IsLoaner":  true,
         "DateAdded":  "2026-01-22 15:33:50"
+    },
+    {
+        "SerialNumber":  "PF481HZG",
+        "Model":  "",
+        "Location":  "Denver",
+        "IsLoaner":  true,
+        "DateAdded":  "2026-01-26 09:23:28"
     }
 ]
