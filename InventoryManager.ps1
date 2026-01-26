@@ -345,6 +345,27 @@ $btnCheckStatus.Location = New-Object System.Drawing.Point(380, 555)
 $btnCheckStatus.Size = New-Object System.Drawing.Size(100, 30)
 $tabLoaner.Controls.Add($btnCheckStatus)
 
+# Assign Button
+$btnAssignLoaner = New-Object System.Windows.Forms.Button
+$btnAssignLoaner.Text = "Assign"
+$btnAssignLoaner.Location = New-Object System.Drawing.Point(490, 555)
+$btnAssignLoaner.Size = New-Object System.Drawing.Size(100, 30)
+$tabLoaner.Controls.Add($btnAssignLoaner)
+
+# Unassign Button
+$btnUnassignLoaner = New-Object System.Windows.Forms.Button
+$btnUnassignLoaner.Text = "Unassign"
+$btnUnassignLoaner.Location = New-Object System.Drawing.Point(600, 555)
+$btnUnassignLoaner.Size = New-Object System.Drawing.Size(100, 30)
+$tabLoaner.Controls.Add($btnUnassignLoaner)
+
+# Show Details Button
+$btnShowDetailsLoaner = New-Object System.Windows.Forms.Button
+$btnShowDetailsLoaner.Text = "Show Details"
+$btnShowDetailsLoaner.Location = New-Object System.Drawing.Point(710, 555)
+$btnShowDetailsLoaner.Size = New-Object System.Drawing.Size(100, 30)
+$tabLoaner.Controls.Add($btnShowDetailsLoaner)
+
 # Add tabs to control
 $tabControl.TabPages.Add($tabImport)
 $tabControl.TabPages.Add($tabInventory)
@@ -1154,6 +1175,148 @@ $btnRefreshLoaners.Add_Click({
     Update-LoanerList
 })
 
+# Assign Loaner button
+$btnAssignLoaner.Add_Click({
+    if ($dgvLoaners.SelectedRows.Count -eq 0) {
+        [System.Windows.Forms.MessageBox]::Show("Please select a loaner laptop to assign.", "No Selection", "OK", "Warning")
+        return
+    }
+    
+    $selectedSerial = $dgvLoaners.SelectedRows[0].Cells["SerialNumber"].Value
+    
+    # Create dialog for user ID
+    $assignDialog = New-Object System.Windows.Forms.Form
+    $assignDialog.Text = "Assign Loaner Laptop"
+    $assignDialog.Size = New-Object System.Drawing.Size(400, 150)
+    $assignDialog.StartPosition = "CenterParent"
+    $assignDialog.FormBorderStyle = "FixedDialog"
+    $assignDialog.MaximizeBox = $false
+    $assignDialog.MinimizeBox = $false
+    
+    $lblUserId = New-Object System.Windows.Forms.Label
+    $lblUserId.Text = "User ID:"
+    $lblUserId.Location = New-Object System.Drawing.Point(20, 20)
+    $lblUserId.Size = New-Object System.Drawing.Size(80, 20)
+    $assignDialog.Controls.Add($lblUserId)
+    
+    $txtUserId = New-Object System.Windows.Forms.TextBox
+    $txtUserId.Location = New-Object System.Drawing.Point(110, 18)
+    $txtUserId.Size = New-Object System.Drawing.Size(250, 20)
+    $assignDialog.Controls.Add($txtUserId)
+    
+    $btnAssignOk = New-Object System.Windows.Forms.Button
+    $btnAssignOk.Text = "Assign"
+    $btnAssignOk.Location = New-Object System.Drawing.Point(150, 70)
+    $btnAssignOk.Size = New-Object System.Drawing.Size(80, 30)
+    $btnAssignOk.DialogResult = "OK"
+    $assignDialog.Controls.Add($btnAssignOk)
+    
+    $btnAssignCancel = New-Object System.Windows.Forms.Button
+    $btnAssignCancel.Text = "Cancel"
+    $btnAssignCancel.Location = New-Object System.Drawing.Point(240, 70)
+    $btnAssignCancel.Size = New-Object System.Drawing.Size(80, 30)
+    $btnAssignCancel.DialogResult = "Cancel"
+    $assignDialog.Controls.Add($btnAssignCancel)
+    
+    $assignDialog.AcceptButton = $btnAssignOk
+    $assignDialog.CancelButton = $btnAssignCancel
+    
+    $dialogResult = $assignDialog.ShowDialog()
+    
+    if ($dialogResult -eq "OK") {
+        $userId = $txtUserId.Text.Trim()
+        
+        if ([string]::IsNullOrWhiteSpace($userId)) {
+            [System.Windows.Forms.MessageBox]::Show("Please enter a user ID.", "Validation Error", "OK", "Warning")
+            return
+        }
+        
+        # Look up user in Active Directory
+        try {
+            $form.Cursor = [System.Windows.Forms.Cursors]::WaitCursor
+            
+            $adUser = Get-ADUser -Identity $userId -Properties DisplayName, EmailAddress, Manager -ErrorAction Stop
+            
+            $userName = $adUser.DisplayName
+            $userEmail = if ($adUser.EmailAddress) { $adUser.EmailAddress } else { "N/A" }
+            $managerName = "N/A"
+            $managerEmail = "N/A"
+            
+            # Get manager information if exists
+            if ($adUser.Manager) {
+                try {
+                    $manager = Get-ADUser -Identity $adUser.Manager -Properties DisplayName, EmailAddress -ErrorAction Stop
+                    $managerName = $manager.DisplayName
+                    $managerEmail = if ($manager.EmailAddress) { $manager.EmailAddress } else { "N/A" }
+                }
+                catch {
+                    Write-Host "Could not retrieve manager details: $($_.Exception.Message)"
+                }
+            }
+            
+            # Update inventory
+            $script:inventory = @(Load-Inventory)
+            $loaner = $script:inventory | Where-Object { $_.SerialNumber -eq $selectedSerial }
+            
+            if ($loaner) {
+                $loaner | Add-Member -MemberType NoteProperty -Name AssignedTo -Value $userId -Force
+                $loaner | Add-Member -MemberType NoteProperty -Name AssignedName -Value $userName -Force
+                $loaner | Add-Member -MemberType NoteProperty -Name AssignedEmail -Value $userEmail -Force
+                $loaner | Add-Member -MemberType NoteProperty -Name ManagerName -Value $managerName -Force
+                $loaner | Add-Member -MemberType NoteProperty -Name ManagerEmail -Value $managerEmail -Force
+                
+                Save-Inventory
+                Update-LoanerList
+                
+                $form.Cursor = [System.Windows.Forms.Cursors]::Default
+                
+                $message = "Loaner laptop assigned successfully!`n`n"
+                $message += "Assigned To: $userName ($userId)`n"
+                $message += "Email: $userEmail`n"
+                $message += "Manager: $managerName`n"
+                $message += "Manager Email: $managerEmail"
+                
+                [System.Windows.Forms.MessageBox]::Show($message, "Assignment Complete", "OK", "Information")
+            }
+        }
+        catch {
+            $form.Cursor = [System.Windows.Forms.Cursors]::Default
+            [System.Windows.Forms.MessageBox]::Show("Error looking up user in Active Directory: $($_.Exception.Message)`n`nPlease verify the user ID is correct and you have access to Active Directory.", "AD Lookup Error", "OK", "Error")
+        }
+    }
+})
+
+# Unassign Loaner button
+$btnUnassignLoaner.Add_Click({
+    if ($dgvLoaners.SelectedRows.Count -eq 0) {
+        [System.Windows.Forms.MessageBox]::Show("Please select a loaner laptop to unassign.", "No Selection", "OK", "Warning")
+        return
+    }
+    
+    $selectedSerial = $dgvLoaners.SelectedRows[0].Cells["SerialNumber"].Value
+    
+    $result = [System.Windows.Forms.MessageBox]::Show("Are you sure you want to unassign this loaner laptop?", "Confirm Unassignment", "YesNo", "Question")
+    
+    if ($result -eq "Yes") {
+        $script:inventory = @(Load-Inventory)
+        $loaner = $script:inventory | Where-Object { $_.SerialNumber -eq $selectedSerial }
+        
+        if ($loaner) {
+            # Remove assignment properties
+            $loaner.PSObject.Properties.Remove('AssignedTo')
+            $loaner.PSObject.Properties.Remove('AssignedName')
+            $loaner.PSObject.Properties.Remove('AssignedEmail')
+            $loaner.PSObject.Properties.Remove('ManagerName')
+            $loaner.PSObject.Properties.Remove('ManagerEmail')
+            
+            Save-Inventory
+            Update-LoanerList
+            
+            [System.Windows.Forms.MessageBox]::Show("Loaner laptop unassigned successfully!", "Unassignment Complete", "OK", "Information")
+        }
+    }
+})
+
 # Check Status button
 $btnCheckStatus.Add_Click({
     $script:inventory = @(Load-Inventory)
@@ -1206,6 +1369,202 @@ $btnCheckStatus.Add_Click({
     [System.Windows.Forms.MessageBox]::Show("Status check complete!`n`nOnline: $onlineCount`nOffline: $offlineCount`nDNS Error: $dnsErrorCount", "Status Check Complete", "OK", "Information")
 })
 
+# Show Details for Loaner button
+$btnShowDetailsLoaner.Add_Click({
+    if ($dgvLoaners.SelectedRows.Count -eq 0) {
+        [System.Windows.Forms.MessageBox]::Show("Please select a loaner laptop to view details.", "No Selection", "OK", "Warning")
+        return
+    }
+    
+    $selectedSerial = $dgvLoaners.SelectedRows[0].Cells["SerialNumber"].Value
+    
+    # Create details form
+    $detailsForm = New-Object System.Windows.Forms.Form
+    $detailsForm.Text = "Loaner Laptop Details - $selectedSerial"
+    $detailsForm.Size = New-Object System.Drawing.Size(600, 500)
+    $detailsForm.StartPosition = "CenterParent"
+    $detailsForm.FormBorderStyle = "FixedDialog"
+    $detailsForm.MaximizeBox = $false
+    $detailsForm.MinimizeBox = $false
+    
+    # Details text box
+    $txtDetails = New-Object System.Windows.Forms.TextBox
+    $txtDetails.Location = New-Object System.Drawing.Point(10, 10)
+    $txtDetails.Size = New-Object System.Drawing.Size(565, 410)
+    $txtDetails.Multiline = $true
+    $txtDetails.ScrollBars = "Vertical"
+    $txtDetails.ReadOnly = $true
+    $txtDetails.Font = New-Object System.Drawing.Font("Consolas", 9)
+    $txtDetails.Text = "Gathering information, please wait..."
+    $detailsForm.Controls.Add($txtDetails)
+    
+    # Close button
+    $btnClose = New-Object System.Windows.Forms.Button
+    $btnClose.Text = "Close"
+    $btnClose.Location = New-Object System.Drawing.Point(250, 430)
+    $btnClose.Size = New-Object System.Drawing.Size(80, 30)
+    $btnClose.DialogResult = "OK"
+    $detailsForm.Controls.Add($btnClose)
+    $detailsForm.AcceptButton = $btnClose
+    
+    # Show form and gather info in background
+    $detailsForm.Add_Shown({
+        $details = @()
+        $details += "=" * 80
+        $details += "LOANER LAPTOP DETAILS"
+        $details += "=" * 80
+        $details += ""
+        $details += "Serial Number: $selectedSerial"
+        
+        # Get loaner info from inventory
+        $script:inventory = @(Load-Inventory)
+        $loanerInfo = $script:inventory | Where-Object { $_.SerialNumber -eq $selectedSerial }
+        
+        if ($loanerInfo) {
+            $details += "Model: $(if ($loanerInfo.Model) { $loanerInfo.Model } else { 'N/A' })"
+            $details += "Location: $($loanerInfo.Location)"
+            $details += "Date Added: $($loanerInfo.DateAdded)"
+            
+            if ($loanerInfo.PSObject.Properties['AssignedTo'] -and ![string]::IsNullOrWhiteSpace($loanerInfo.AssignedTo)) {
+                $details += ""
+                $details += "Assignment Information:"
+                $details += "  Assigned To: $($loanerInfo.AssignedTo)"
+                $details += "  User Name: $(if ($loanerInfo.AssignedName) { $loanerInfo.AssignedName } else { 'N/A' })"
+                $details += "  User Email: $(if ($loanerInfo.AssignedEmail) { $loanerInfo.AssignedEmail } else { 'N/A' })"
+                $details += "  Manager Name: $(if ($loanerInfo.ManagerName) { $loanerInfo.ManagerName } else { 'N/A' })"
+                $details += "  Manager Email: $(if ($loanerInfo.ManagerEmail) { $loanerInfo.ManagerEmail } else { 'N/A' })"
+            } else {
+                $details += ""
+                $details += "Assignment: Not currently assigned"
+            }
+        }
+        
+        $details += ""
+        $details += "-" * 80
+        $details += "NETWORK STATUS"
+        $details += "-" * 80
+        
+        # Try to ping the computer
+        $pingResult = $false
+        try {
+            $details += ""
+            $details += "Testing connectivity to $selectedSerial..."
+            $pingTest = Test-Connection -ComputerName $selectedSerial -Count 2 -ErrorAction Stop
+            if ($pingTest) {
+                $pingResult = $true
+                $details += "Status: ONLINE (Ping successful)"
+                $details += "IP Address: $($pingTest[0].IPV4Address)"
+                $details += "Response Time: $($pingTest[0].ResponseTime)ms"
+            }
+        }
+        catch {
+            $details += "Status: OFFLINE (No response to ping)"
+            $details += "Error: $($_.Exception.Message)"
+        }
+        
+        $details += ""
+        $details += "-" * 80
+        $details += "ACTIVE DIRECTORY INFORMATION"
+        $details += "-" * 80
+        
+        # Try to get AD computer information
+        try {
+            $details += ""
+            $details += "Querying Active Directory for $selectedSerial..."
+            $adComputer = Get-ADComputer -Identity $selectedSerial -Properties LastLogonDate, Description, OperatingSystem, OperatingSystemVersion, Enabled -ErrorAction Stop
+            
+            $details += "Status: FOUND IN ACTIVE DIRECTORY"
+            $details += ""
+            $details += "Computer Information:"
+            $details += "  Name: $($adComputer.Name)"
+            $details += "  Distinguished Name: $($adComputer.DistinguishedName)"
+            $details += "  Operating System: $($adComputer.OperatingSystem)"
+            $details += "  OS Version: $($adComputer.OperatingSystemVersion)"
+            $details += "  Enabled: $($adComputer.Enabled)"
+            $details += "  Description: $(if ($adComputer.Description) { $adComputer.Description } else { 'None' })"
+            $details += "  Computer Last Logon: $(if ($adComputer.LastLogonDate) { $adComputer.LastLogonDate } else { 'Never' })"
+            
+            # Try to get logged-on user
+            $details += ""
+            $details += "-" * 80
+            $details += "LOGGED-ON USER INFORMATION"
+            $details += "-" * 80
+            $details += ""
+            
+            if ($pingResult) {
+                try {
+                    $loggedOnUser = Get-WmiObject -Class Win32_ComputerSystem -ComputerName $selectedSerial -ErrorAction Stop
+                    
+                    if ($loggedOnUser.UserName) {
+                        $details += "Current User: $($loggedOnUser.UserName)"
+                        $details += ""
+                        
+                        # Get user details from AD
+                        try {
+                            $userName = $loggedOnUser.UserName.Split('\\')[1]
+                            $adUser = Get-ADUser -Identity $userName -Properties DisplayName, EmailAddress, Title, Department, LastLogonDate, Manager, SamAccountName -ErrorAction Stop
+                            
+                            $details += "User Details:"
+                            $details += "  User ID: $($adUser.SamAccountName)"
+                            $details += "  Display Name: $($adUser.DisplayName)"
+                            $details += "  Email: $(if ($adUser.EmailAddress) { $adUser.EmailAddress } else { 'N/A' })"
+                            $details += "  Title: $(if ($adUser.Title) { $adUser.Title } else { 'N/A' })"
+                            $details += "  Department: $(if ($adUser.Department) { $adUser.Department } else { 'N/A' })"
+                            $details += "  User Last Logon: $(if ($adUser.LastLogonDate) { $adUser.LastLogonDate } else { 'Unknown' })"
+                            
+                            # Get manager information
+                            if ($adUser.Manager) {
+                                $details += ""
+                                $details += "Manager Information:"
+                                try {
+                                    $manager = Get-ADUser -Identity $adUser.Manager -Properties DisplayName, EmailAddress, SamAccountName -ErrorAction Stop
+                                    $details += "  Manager ID: $($manager.SamAccountName)"
+                                    $details += "  Manager Name: $($manager.DisplayName)"
+                                    $details += "  Manager Email: $(if ($manager.EmailAddress) { $manager.EmailAddress } else { 'N/A' })"
+                                }
+                                catch {
+                                    $details += "  Unable to retrieve manager details: $($_.Exception.Message)"
+                                }
+                            } else {
+                                $details += ""
+                                $details += "Manager Information: No manager assigned in Active Directory"
+                            }
+                        }
+                        catch {
+                            $details += "Unable to retrieve user details from Active Directory:"
+                            $details += "  Error: $($_.Exception.Message)"
+                        }
+                    } else {
+                        $details += "Status: No user currently logged on to this device"
+                    }
+                }
+                catch {
+                    $details += "Unable to query logged-on user:"
+                    $details += "  Error: $($_.Exception.Message)"
+                }
+            } else {
+                $details += "Cannot query logged-on user - device is not connected to the network"
+            }
+        }
+        catch {
+            $details += "Status: NOT FOUND IN ACTIVE DIRECTORY"
+            $details += "Error: $($_.Exception.Message)"
+            $details += ""
+            $details += "Note: The device may not exist in Active Directory, or you may not have"
+            $details += "permission to query AD. Ensure the Active Directory PowerShell module is installed."
+        }
+        
+        $details += ""
+        $details += "=" * 80
+        $details += "END OF REPORT"
+        $details += "=" * 80
+        
+        $txtDetails.Text = $details -join "`r`n"
+    })
+    
+    [void]$detailsForm.ShowDialog()
+})
+
 # Function to update loaner list
 function Update-LoanerList {
     param(
@@ -1221,6 +1580,11 @@ function Update-LoanerList {
     $dt.Columns.Add("SerialNumber") | Out-Null
     $dt.Columns.Add("Model") | Out-Null
     $dt.Columns.Add("Location") | Out-Null
+    $dt.Columns.Add("AssignedTo") | Out-Null
+    $dt.Columns.Add("UserName") | Out-Null
+    $dt.Columns.Add("UserEmail") | Out-Null
+    $dt.Columns.Add("ManagerName") | Out-Null
+    $dt.Columns.Add("ManagerEmail") | Out-Null
     if ($IncludeStatus) {
         $dt.Columns.Add("Status") | Out-Null
     }
@@ -1231,6 +1595,11 @@ function Update-LoanerList {
         $dr["SerialNumber"] = $loaner.SerialNumber
         $dr["Model"] = if ([string]::IsNullOrWhiteSpace($loaner.Model)) { "" } else { $loaner.Model }
         $dr["Location"] = $loaner.Location
+        $dr["AssignedTo"] = if ($loaner.PSObject.Properties['AssignedTo']) { $loaner.AssignedTo } else { "" }
+        $dr["UserName"] = if ($loaner.PSObject.Properties['AssignedName']) { $loaner.AssignedName } else { "" }
+        $dr["UserEmail"] = if ($loaner.PSObject.Properties['AssignedEmail']) { $loaner.AssignedEmail } else { "" }
+        $dr["ManagerName"] = if ($loaner.PSObject.Properties['ManagerName']) { $loaner.ManagerName } else { "" }
+        $dr["ManagerEmail"] = if ($loaner.PSObject.Properties['ManagerEmail']) { $loaner.ManagerEmail } else { "" }
         
         # Add status if available
         if ($IncludeStatus) {

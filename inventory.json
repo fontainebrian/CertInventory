@@ -88,6 +88,11 @@
         "Model":  "",
         "Location":  "Denver",
         "IsLoaner":  true,
-        "DateAdded":  "2026-01-26 09:23:28"
+        "DateAdded":  "2026-01-26 09:23:28",
+        "AssignedTo":  "e097422",
+        "AssignedName":  "Fontaine, Brian",
+        "AssignedEmail":  "Brian.Fontaine@rsmus.com",
+        "ManagerName":  "Sanchez, David",
+        "ManagerEmail":  "David.Sanchez@rsmus.com"
     }
 ]
