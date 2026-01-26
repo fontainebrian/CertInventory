@@ -1,0 +1,86 @@
+[
+    {
+        "SerialNumber":  "PF40XGSQ",
+        "Model":  "LENOVO ThinkPad T14 Gen 3",
+        "Location":  "Greenwood Village",
+        "IsLoaner":  true,
+        "DateAdded":  "2026-01-22 14:00:08"
+    },
+    {
+        "SerialNumber":  "PF42GS8B",
+        "Model":  "",
+        "Location":  "Greenwood Village",
+        "IsLoaner":  false,
+        "DateAdded":  "2026-01-22 14:24:55"
+    },
+    {
+        "SerialNumber":  "PF40Z2J9",
+        "Model":  "",
+        "Location":  "Greenwood Village",
+        "IsLoaner":  false,
+        "DateAdded":  "2026-01-22 14:25:33"
+    },
+    {
+        "SerialNumber":  "0F37RBY24103MR",
+        "Model":  "",
+        "Location":  "Greenwood Village",
+        "IsLoaner":  false,
+        "DateAdded":  "2026-01-22 14:26:04"
+    },
+    {
+        "SerialNumber":  "PF44DNCE",
+        "Model":  "",
+        "Location":  "Greenwood Village",
+        "IsLoaner":  false,
+        "DateAdded":  "2026-01-22 14:26:28"
+    },
+    {
+        "SerialNumber":  "PF42KFJR",
+        "Model":  "",
+        "Location":  "Greenwood Village",
+        "IsLoaner":  false,
+        "DateAdded":  "2026-01-22 14:26:50"
+    },
+    {
+        "SerialNumber":  "036217213657",
+        "Model":  "",
+        "Location":  "Greenwood Village",
+        "IsLoaner":  true,
+        "DateAdded":  "2026-01-22 15:21:26"
+    },
+    {
+        "SerialNumber":  "PF40XM8K",
+        "Model":  "",
+        "Location":  "Greenwood Village",
+        "IsLoaner":  true,
+        "DateAdded":  "2026-01-22 15:22:18"
+    },
+    {
+        "SerialNumber":  "0F36T8R24133MR",
+        "Model":  "",
+        "Location":  "Greenwood Village",
+        "IsLoaner":  false,
+        "DateAdded":  "2026-01-22 15:23:17"
+    },
+    {
+        "SerialNumber":  "0F33RB623523FB",
+        "Model":  "",
+        "Location":  "Greenwood Village",
+        "IsLoaner":  false,
+        "DateAdded":  "2026-01-22 15:23:59"
+    },
+    {
+        "SerialNumber":  "0F33Q7Q23523FB",
+        "Model":  "",
+        "Location":  "Greenwood Village",
+        "IsLoaner":  false,
+        "DateAdded":  "2026-01-22 15:24:50"
+    },
+    {
+        "SerialNumber":  "PF40XM8Z",
+        "Model":  "LENOVO ThinkPad T14 Gen 3",
+        "Location":  "Salt Lake City",
+        "IsLoaner":  true,
+        "DateAdded":  "2026-01-22 15:33:50"
+    }
+]
