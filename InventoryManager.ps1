@@ -214,10 +214,28 @@ $grpAdd.Controls.Add($btnAddLaptop)
 
 $tabInventory.Controls.Add($grpAdd)
 
+# Search Section
+$lblSearch = New-Object System.Windows.Forms.Label
+$lblSearch.Text = "Search:"
+$lblSearch.Location = New-Object System.Drawing.Point(10, 145)
+$lblSearch.Size = New-Object System.Drawing.Size(60, 20)
+$tabInventory.Controls.Add($lblSearch)
+
+$txtSearchInventory = New-Object System.Windows.Forms.TextBox
+$txtSearchInventory.Location = New-Object System.Drawing.Point(75, 143)
+$txtSearchInventory.Size = New-Object System.Drawing.Size(300, 20)
+$tabInventory.Controls.Add($txtSearchInventory)
+
+$btnClearSearch = New-Object System.Windows.Forms.Button
+$btnClearSearch.Text = "Clear"
+$btnClearSearch.Location = New-Object System.Drawing.Point(385, 141)
+$btnClearSearch.Size = New-Object System.Drawing.Size(60, 25)
+$tabInventory.Controls.Add($btnClearSearch)
+
 # Current Inventory Section
 $lblInventory = New-Object System.Windows.Forms.Label
 $lblInventory.Text = "Current Inventory:"
-$lblInventory.Location = New-Object System.Drawing.Point(10, 145)
+$lblInventory.Location = New-Object System.Drawing.Point(460, 145)
 $lblInventory.Size = New-Object System.Drawing.Size(150, 20)
 $tabInventory.Controls.Add($lblInventory)
 
@@ -727,6 +745,7 @@ $btnAddLaptop.Add_Click({
     
     # Refresh display
     Update-InventoryGrid
+    Update-LoanerList
     
     [System.Windows.Forms.MessageBox]::Show("Laptop added to inventory successfully!", "Success", "OK", "Information")
 })
@@ -752,6 +771,19 @@ $btnRemoveLaptop.Add_Click({
 
 # Refresh inventory display
 $btnRefreshInventory.Add_Click({
+    $txtSearchInventory.Text = ""
+    Update-InventoryGrid
+})
+
+# Search inventory as user types
+$txtSearchInventory.Add_TextChanged({
+    $searchText = $txtSearchInventory.Text.Trim()
+    Update-InventoryGrid -SearchText $searchText
+})
+
+# Clear search button
+$btnClearSearch.Add_Click({
+    $txtSearchInventory.Text = ""
     Update-InventoryGrid
 })
 
@@ -941,6 +973,38 @@ $btnCheckDevice.Add_Click({
     $details += ""
     $details += "Checked: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
     $details += ""
+    
+    # Check Inventory
+    $details += "-" * 80
+    $details += "INVENTORY STATUS"
+    $details += "-" * 80
+    $details += ""
+    
+    # Reload inventory to ensure we have the latest data
+    $currentInventory = @(Load-Inventory)
+    $inventoryItem = $currentInventory | Where-Object { $_.SerialNumber.Trim() -eq $serial.Trim() }
+    
+    if ($inventoryItem) {
+        $details += "Status: FOUND IN INVENTORY"
+        $details += ""
+        $details += "Inventory Information:"
+        $details += "  Serial Number: $($inventoryItem.SerialNumber)"
+        $details += "  Model: $(if ($inventoryItem.Model) { $inventoryItem.Model } else { 'N/A' })"
+        $details += "  Location: $(if ($inventoryItem.Location) { $inventoryItem.Location } else { 'N/A' })"
+        $details += "  Date Added: $(if ($inventoryItem.DateAdded) { $inventoryItem.DateAdded } else { 'N/A' })"
+        if ($inventoryItem.Notes) {
+            $details += "  Notes: $($inventoryItem.Notes)"
+        }
+        if ($inventoryItem.IsLoaner -eq $true) {
+            $details += "  Type: LOANER LAPTOP"
+        } else {
+            $details += "  Type: Regular Inventory"
+        }
+    } else {
+        $details += "Status: NOT FOUND IN INVENTORY"
+        $details += ""
+        $details += "This device is not currently tracked in the inventory system."
+    }
     
     # Test ping
     $details += "-" * 80
@@ -1651,7 +1715,21 @@ function Update-LoanerList {
 
 # Function to update inventory grid
 function Update-InventoryGrid {
+    param(
+        [string]$SearchText = ""
+    )
+    
     $script:inventory = @(Load-Inventory)
+    
+    # Filter inventory based on search text
+    $filteredInventory = $script:inventory
+    if (-not [string]::IsNullOrWhiteSpace($SearchText)) {
+        $filteredInventory = $script:inventory | Where-Object {
+            ($_.SerialNumber -like "*$SearchText*") -or
+            ($_.Model -like "*$SearchText*") -or
+            ($_.Location -like "*$SearchText*")
+        }
+    }
     
     $dt = New-Object System.Data.DataTable
     $dt.Columns.Add("SerialNumber") | Out-Null
@@ -1660,7 +1738,7 @@ function Update-InventoryGrid {
     $dt.Columns.Add("IsLoaner") | Out-Null
     $dt.Columns.Add("DateAdded") | Out-Null
     
-    foreach ($item in $script:inventory) {
+    foreach ($item in $filteredInventory) {
         $dr = $dt.NewRow()
         $dr["SerialNumber"] = $item.SerialNumber
         $dr["Model"] = $item.Model
