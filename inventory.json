@@ -77,18 +77,6 @@
         "DateAdded":  "2026-01-22 15:33:50"
     },
     {
-        "SerialNumber":  "PF481HZG",
-        "Model":  "",
-        "Location":  "Denver",
-        "IsLoaner":  true,
-        "DateAdded":  "2026-01-26 09:23:28",
-        "AssignedTo":  "e097422",
-        "AssignedName":  "Fontaine, Brian",
-        "AssignedEmail":  "Brian.Fontaine@rsmus.com",
-        "ManagerName":  "Sanchez, David",
-        "ManagerEmail":  "David.Sanchez@rsmus.com"
-    },
-    {
         "SerialNumber":  "018984513457",
         "Model":  "",
         "Location":  "Greenwood Village",
@@ -171,5 +159,47 @@
         "Location":  "Denver",
         "IsLoaner":  true,
         "DateAdded":  "2026-01-30 10:14:26"
+    },
+    {
+        "SerialNumber":  "PF48ADY0",
+        "Model":  "",
+        "Location":  "Denver",
+        "IsLoaner":  true,
+        "DateAdded":  "2026-02-10 12:33:12"
+    },
+    {
+        "SerialNumber":  "PF3CDT80",
+        "Model":  "",
+        "Location":  "Denver",
+        "IsLoaner":  false,
+        "DateAdded":  "2026-02-11 14:54:11"
+    },
+    {
+        "SerialNumber":  "PF48H9J4",
+        "Model":  "",
+        "Location":  "Salt Lake City",
+        "IsLoaner":  true,
+        "DateAdded":  "2026-02-25 09:33:02"
+    },
+    {
+        "SerialNumber":  "PF51QD64",
+        "Model":  "",
+        "Location":  "Salt Lake City",
+        "IsLoaner":  true,
+        "DateAdded":  "2026-02-25 09:33:15"
+    },
+    {
+        "SerialNumber":  "PF44C7D2",
+        "Model":  "",
+        "Location":  "Salt Lake City",
+        "IsLoaner":  true,
+        "DateAdded":  "2026-02-25 09:33:32"
+    },
+    {
+        "SerialNumber":  "PF48A4YE",
+        "Model":  "",
+        "Location":  "Salt Lake City",
+        "IsLoaner":  true,
+        "DateAdded":  "2026-02-25 09:33:51"
     }
 ]
