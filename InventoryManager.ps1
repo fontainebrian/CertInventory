@@ -1,4 +1,4 @@
-﻿# Laptop Inventory Management Application
+# Laptop Inventory Management Application
 # Allows importing CSV, comparing with in-stock inventory, and managing inventory
 
 Add-Type -AssemblyName System.Windows.Forms
@@ -1214,27 +1214,52 @@ $btnEmailCsvUser.Add_Click({
         return
     }
 
-    # Look up user in Active Directory to get email and manager
+    # Look up user in Active Directory by name to get email and manager
     $userEmail = ""
     $managerEmail = ""
-    try {
-        $form.Cursor = [System.Windows.Forms.Cursors]::WaitCursor
-        $adUser = Get-ADUser -Identity $assignedTo -Properties EmailAddress, Manager -ErrorAction Stop
-        $userEmail = if ($adUser.EmailAddress) { $adUser.EmailAddress } else { "" }
+    $form.Cursor = [System.Windows.Forms.Cursors]::WaitCursor
 
-        if ($adUser.Manager) {
-            try {
-                $mgr = Get-ADUser -Identity $adUser.Manager -Properties EmailAddress -ErrorAction Stop
-                $managerEmail = if ($mgr.EmailAddress) { $mgr.EmailAddress } else { "" }
-            }
-            catch { }
-        }
-        $form.Cursor = [System.Windows.Forms.Cursors]::Default
+    $adUser = $null
+    $safeName = $assignedTo -replace "'", "''"
+
+    # Try DisplayName exact match
+    try {
+        $r = @(Get-ADUser -Filter "DisplayName -eq '$safeName'" -Properties EmailAddress, Manager -ErrorAction Stop)
+        if ($r.Count -gt 0) { $adUser = $r[0] }
+    } catch { }
+
+    # Try Name (CN) exact match
+    if (-not $adUser) {
+        try {
+            $r = @(Get-ADUser -Filter "Name -eq '$safeName'" -Properties EmailAddress, Manager -ErrorAction Stop)
+            if ($r.Count -gt 0) { $adUser = $r[0] }
+        } catch { }
     }
-    catch {
-        $form.Cursor = [System.Windows.Forms.Cursors]::Default
-        [System.Windows.Forms.MessageBox]::Show("Could not look up user '$assignedTo' in Active Directory: $($_.Exception.Message)", "AD Lookup Error", "OK", "Error")
+
+    # Try GivenName + Surname
+    if (-not $adUser -and $assignedTo -match ' ') {
+        try {
+            $nameParts = $assignedTo -split '\s+', 2
+            $firstName = $nameParts[0].Trim() -replace "'", "''"
+            $lastName  = $nameParts[1].Trim() -replace "'", "''"
+            $r = @(Get-ADUser -Filter "GivenName -eq '$firstName' -and Surname -eq '$lastName'" -Properties EmailAddress, Manager -ErrorAction Stop)
+            if ($r.Count -gt 0) { $adUser = $r[0] }
+        } catch { }
+    }
+
+    $form.Cursor = [System.Windows.Forms.Cursors]::Default
+
+    if (-not $adUser) {
+        [System.Windows.Forms.MessageBox]::Show("Could not find user '$assignedTo' in Active Directory.", "AD Lookup Error", "OK", "Error")
         return
+    }
+
+    $userEmail = if ($adUser.EmailAddress) { $adUser.EmailAddress } else { "" }
+    if ($adUser.Manager) {
+        try {
+            $mgr = Get-ADUser -Identity $adUser.Manager -Properties EmailAddress -ErrorAction Stop
+            $managerEmail = if ($mgr.EmailAddress) { $mgr.EmailAddress } else { "" }
+        } catch { }
     }
 
     if ([string]::IsNullOrWhiteSpace($userEmail)) {
@@ -1323,10 +1348,9 @@ $btnEmailCsvUser.Add_Click({
         $ccList += $managerEmail
     }
     $ccList += $fromEmail
-    $ccString = [string]::Join(",", $ccList)
 
     try {
-        Send-Email -SendTo $userEmail -AssetTag $assetTag -SerialNumber $selectedSerial -Model $model -EmailAdd $fromEmail -Cc $ccString
+        Send-Email -SendTo $userEmail -AssetTag $assetTag -SerialNumber $selectedSerial -Model $model -EmailAdd $fromEmail -Cc $ccList
         [System.Windows.Forms.MessageBox]::Show("Email sent successfully to $userEmail.", "Email Sent", "OK", "Information")
     }
     catch {
@@ -2138,10 +2162,9 @@ $btnEmailLoanerUser.Add_Click({
         $ccList += $managerEmail
     }
     $ccList += $fromEmail
-    $ccString = [string]::Join(",", $ccList)
 
     try {
-        Send-Email -SendTo $userEmail -Date (Get-Date -Format "MM/dd/yyyy") -AssetTag $assetTag -SerialNumber $selectedSerial -Model $model -EmailAdd $fromEmail -Cc $ccString
+        Send-Email -SendTo $userEmail -Date (Get-Date -Format "MM/dd/yyyy") -AssetTag $assetTag -SerialNumber $selectedSerial -Model $model -EmailAdd $fromEmail -Cc $ccList
         [System.Windows.Forms.MessageBox]::Show("Email sent successfully to $userEmail.", "Email Sent", "OK", "Information")
     }
     catch {
@@ -2249,22 +2272,46 @@ $btnEmailMissingUser.Add_Click({
 
     $userEmail = ""
     $managerEmail = ""
+    $form.Cursor = [System.Windows.Forms.Cursors]::WaitCursor
+
+    $adUser = $null
+    $safeName = $assignedTo -replace "'", "''"
+
     try {
-        $form.Cursor = [System.Windows.Forms.Cursors]::WaitCursor
-        $adUser = Get-ADUser -Identity $assignedTo -Properties EmailAddress, Manager -ErrorAction Stop
-        $userEmail = if ($adUser.EmailAddress) { $adUser.EmailAddress } else { "" }
-        if ($adUser.Manager) {
-            try {
-                $mgr = Get-ADUser -Identity $adUser.Manager -Properties EmailAddress -ErrorAction Stop
-                $managerEmail = if ($mgr.EmailAddress) { $mgr.EmailAddress } else { "" }
-            } catch { }
-        }
-        $form.Cursor = [System.Windows.Forms.Cursors]::Default
+        $r = @(Get-ADUser -Filter "DisplayName -eq '$safeName'" -Properties EmailAddress, Manager -ErrorAction Stop)
+        if ($r.Count -gt 0) { $adUser = $r[0] }
+    } catch { }
+
+    if (-not $adUser) {
+        try {
+            $r = @(Get-ADUser -Filter "Name -eq '$safeName'" -Properties EmailAddress, Manager -ErrorAction Stop)
+            if ($r.Count -gt 0) { $adUser = $r[0] }
+        } catch { }
     }
-    catch {
-        $form.Cursor = [System.Windows.Forms.Cursors]::Default
-        [System.Windows.Forms.MessageBox]::Show("Could not look up '$assignedTo' in Active Directory: $($_.Exception.Message)", "AD Lookup Error", "OK", "Error")
+
+    if (-not $adUser -and $assignedTo -match ' ') {
+        try {
+            $nameParts = $assignedTo -split '\s+', 2
+            $firstName = $nameParts[0].Trim() -replace "'", "''"
+            $lastName  = $nameParts[1].Trim() -replace "'", "''"
+            $r = @(Get-ADUser -Filter "GivenName -eq '$firstName' -and Surname -eq '$lastName'" -Properties EmailAddress, Manager -ErrorAction Stop)
+            if ($r.Count -gt 0) { $adUser = $r[0] }
+        } catch { }
+    }
+
+    $form.Cursor = [System.Windows.Forms.Cursors]::Default
+
+    if (-not $adUser) {
+        [System.Windows.Forms.MessageBox]::Show("Could not find '$assignedTo' in Active Directory.", "AD Lookup Error", "OK", "Error")
         return
+    }
+
+    $userEmail = if ($adUser.EmailAddress) { $adUser.EmailAddress } else { "" }
+    if ($adUser.Manager) {
+        try {
+            $mgr = Get-ADUser -Identity $adUser.Manager -Properties EmailAddress -ErrorAction Stop
+            $managerEmail = if ($mgr.EmailAddress) { $mgr.EmailAddress } else { "" }
+        } catch { }
     }
 
     if ([string]::IsNullOrWhiteSpace($userEmail)) {
@@ -2304,7 +2351,7 @@ $btnEmailMissingUser.Add_Click({
     $ccList += $fromEmail
 
     try {
-        Send-Email -SendTo $userEmail -AssetTag $assetTag -SerialNumber $selectedSerial -Model $model -EmailAdd $fromEmail -Cc ([string]::Join(",", $ccList))
+        Send-Email -SendTo $userEmail -AssetTag $assetTag -SerialNumber $selectedSerial -Model $model -EmailAdd $fromEmail -Cc $ccList
         [System.Windows.Forms.MessageBox]::Show("Email sent successfully to $userEmail.", "Email Sent", "OK", "Information")
     }
     catch {
@@ -2440,7 +2487,7 @@ function Send-Email {
         [string]$EmailAdd,
 
         [Parameter(Mandatory=$false)]
-        [string]$Cc
+        [string[]]$Cc
     )
 
     $Body = @"
@@ -2472,7 +2519,7 @@ Brian Fontaine
         SmtpServer = $SMTP
     }
 
-    if (-not [string]::IsNullOrWhiteSpace($Cc)) {
+    if ($Cc -and $Cc.Count -gt 0) {
         $mailParams.Cc = $Cc
     }
 

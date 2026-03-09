@@ -16,5 +16,23 @@
         "CSVStatus":  "In use",
         "CSVLocation":  "",
         "DateMarked":  "2026-03-09 10:29:21"
+    },
+    {
+        "SerialNumber":  "028362713857",
+        "Model":  "Microsoft Surface Laptop 4",
+        "AssetTag":  "N/A",
+        "AssignedTo":  "Nic Weaver",
+        "CSVStatus":  "In use",
+        "CSVLocation":  "",
+        "DateMarked":  "2026-03-09 14:28:46"
+    },
+    {
+        "SerialNumber":  "0F33JB925123PJ",
+        "Model":  "Microsoft Surface Laptop 7",
+        "AssetTag":  "N/A",
+        "AssignedTo":  "Dave Williams",
+        "CSVStatus":  "In use",
+        "CSVLocation":  "",
+        "DateMarked":  "2026-03-09 14:29:58"
     }
 ]
