@@ -1,4 +1,4 @@
-# Laptop Inventory Management Application
+﻿# Laptop Inventory Management Application
 # Allows importing CSV, comparing with in-stock inventory, and managing inventory
 
 Add-Type -AssemblyName System.Windows.Forms
@@ -127,6 +127,14 @@ $btnCompare.Size = New-Object System.Drawing.Size(150, 25)
 $btnCompare.Enabled = $false
 $tabImport.Controls.Add($btnCompare)
 
+# Email User Button (CSV tab)
+$btnEmailCsvUser = New-Object System.Windows.Forms.Button
+$btnEmailCsvUser.Text = "Email User"
+$btnEmailCsvUser.Location = New-Object System.Drawing.Point(560, 53)
+$btnEmailCsvUser.Size = New-Object System.Drawing.Size(100, 25)
+$btnEmailCsvUser.Enabled = $false
+$tabImport.Controls.Add($btnEmailCsvUser)
+
 $dgvCsv = New-Object System.Windows.Forms.DataGridView
 $dgvCsv.Location = New-Object System.Drawing.Point(10, 85)
 $dgvCsv.Size = New-Object System.Drawing.Size(1135, 255)
@@ -135,6 +143,22 @@ $dgvCsv.AllowUserToDeleteRows = $false
 $dgvCsv.ReadOnly = $true
 $dgvCsv.AutoSizeColumnsMode = "Fill"
 $dgvCsv.SelectionMode = "FullRowSelect"
+
+# Context menu for CSV grid - copy serial number
+$contextMenuCsv = New-Object System.Windows.Forms.ContextMenuStrip
+$menuItemCopyCsvSerial = New-Object System.Windows.Forms.ToolStripMenuItem
+$menuItemCopyCsvSerial.Text = "Copy Serial Number"
+$menuItemCopyCsvSerial.Add_Click({
+    if ($dgvCsv.SelectedRows.Count -gt 0) {
+        $serialValue = $dgvCsv.SelectedRows[0].Cells["serial_number"].Value
+        if ($null -ne $serialValue -and $serialValue -ne "") {
+            [System.Windows.Forms.Clipboard]::SetText($serialValue)
+        }
+    }
+})
+$contextMenuCsv.Items.Add($menuItemCopyCsvSerial) | Out-Null
+$dgvCsv.ContextMenuStrip = $contextMenuCsv
+
 $tabImport.Controls.Add($dgvCsv)
 
 # Comparison Results
@@ -402,6 +426,13 @@ $btnShowDetailsLoaner.Location = New-Object System.Drawing.Point(710, 555)
 $btnShowDetailsLoaner.Size = New-Object System.Drawing.Size(100, 30)
 $tabLoaner.Controls.Add($btnShowDetailsLoaner)
 
+# Email User Button
+$btnEmailLoanerUser = New-Object System.Windows.Forms.Button
+$btnEmailLoanerUser.Text = "Email User"
+$btnEmailLoanerUser.Location = New-Object System.Drawing.Point(820, 555)
+$btnEmailLoanerUser.Size = New-Object System.Drawing.Size(100, 30)
+$tabLoaner.Controls.Add($btnEmailLoanerUser)
+
 # Add tabs to control
 $tabControl.TabPages.Add($tabImport)
 $tabControl.TabPages.Add($tabInventory)
@@ -479,9 +510,22 @@ $btnLoadCsv.Add_Click({
             $form.Cursor = [System.Windows.Forms.Cursors]::Default
             
             $dgvCsv.DataSource = $dt
+
+            # Color code Pingable column text
+            foreach ($row in $dgvCsv.Rows) {
+                $status = $row.Cells["Pingable"].Value
+                if ($status -eq "Online") {
+                    $row.Cells["Pingable"].Style.ForeColor = [System.Drawing.Color]::Green
+                } elseif ($status -eq "Offline") {
+                    $row.Cells["Pingable"].Style.ForeColor = [System.Drawing.Color]::Red
+                } elseif ($status -eq "DNS Error") {
+                    $row.Cells["Pingable"].Style.ForeColor = [System.Drawing.Color]::DarkOrange
+                }
+            }
             $btnCompare.Enabled = $true
             $btnAddFromCsv.Enabled = $true
             $btnShowDetailsCsv.Enabled = $true
+            $btnEmailCsvUser.Enabled = $true
             [System.Windows.Forms.MessageBox]::Show("CSV file loaded successfully! Found $($script:csvData.Count) records.", "Success", "OK", "Information")
         }
     }
@@ -690,6 +734,16 @@ $btnCompare.Add_Click({
         foreach ($row in $dgvResults.Rows) {
             if ($row.Cells["InOurInventory"].Value -eq "Yes") {
                 $row.DefaultCellStyle.BackColor = [System.Drawing.Color]::LightGreen
+            }
+
+            # Color code Pingable text
+            $pingStatus = $row.Cells["Pingable"].Value
+            if ($pingStatus -eq "Online") {
+                $row.Cells["Pingable"].Style.ForeColor = [System.Drawing.Color]::Green
+            } elseif ($pingStatus -eq "Offline") {
+                $row.Cells["Pingable"].Style.ForeColor = [System.Drawing.Color]::Red
+            } elseif ($pingStatus -eq "DNS Error") {
+                $row.Cells["Pingable"].Style.ForeColor = [System.Drawing.Color]::DarkOrange
             }
         }
         
@@ -951,6 +1005,146 @@ $btnShowDetailsCsv.Add_Click({
     })
     
     [void]$detailsForm.ShowDialog()
+})
+
+# Email User button (CSV tab)
+$btnEmailCsvUser.Add_Click({
+    if ($dgvCsv.SelectedRows.Count -eq 0) {
+        [System.Windows.Forms.MessageBox]::Show("Please select an asset from the CSV list.", "No Selection", "OK", "Warning")
+        return
+    }
+
+    $rowIndex = $dgvCsv.SelectedRows[0].Index
+    $csvItem = $script:csvData[$rowIndex]
+
+    $selectedSerial = $csvItem.serial_number
+    $model = if ($csvItem.model) { $csvItem.model } else { "Unknown Model" }
+    $assetTag = if ($csvItem.PSObject.Properties['asset_tag'] -and $csvItem.asset_tag) { $csvItem.asset_tag } else { "N/A" }
+    $assignedTo = if ($csvItem.PSObject.Properties['assigned_to']) { $csvItem.assigned_to } else { "" }
+
+    if ([string]::IsNullOrWhiteSpace($assignedTo)) {
+        [System.Windows.Forms.MessageBox]::Show("This asset does not have an assigned user in the CSV data.", "No User Assigned", "OK", "Warning")
+        return
+    }
+
+    # Look up user in Active Directory to get email and manager
+    $userEmail = ""
+    $managerEmail = ""
+    try {
+        $form.Cursor = [System.Windows.Forms.Cursors]::WaitCursor
+        $adUser = Get-ADUser -Identity $assignedTo -Properties EmailAddress, Manager -ErrorAction Stop
+        $userEmail = if ($adUser.EmailAddress) { $adUser.EmailAddress } else { "" }
+
+        if ($adUser.Manager) {
+            try {
+                $mgr = Get-ADUser -Identity $adUser.Manager -Properties EmailAddress -ErrorAction Stop
+                $managerEmail = if ($mgr.EmailAddress) { $mgr.EmailAddress } else { "" }
+            }
+            catch { }
+        }
+        $form.Cursor = [System.Windows.Forms.Cursors]::Default
+    }
+    catch {
+        $form.Cursor = [System.Windows.Forms.Cursors]::Default
+        [System.Windows.Forms.MessageBox]::Show("Could not look up user '$assignedTo' in Active Directory: $($_.Exception.Message)", "AD Lookup Error", "OK", "Error")
+        return
+    }
+
+    if ([string]::IsNullOrWhiteSpace($userEmail)) {
+        [System.Windows.Forms.MessageBox]::Show("User '$assignedTo' was found in Active Directory but has no email address.", "No Email Address", "OK", "Warning")
+        return
+    }
+
+    # Dialog to capture sender email
+    $emailDialog = New-Object System.Windows.Forms.Form
+    $emailDialog.Text = "Send Laptop Verification Email"
+    $emailDialog.Size = New-Object System.Drawing.Size(500, 220)
+    $emailDialog.StartPosition = "CenterParent"
+    $emailDialog.FormBorderStyle = "FixedDialog"
+    $emailDialog.MaximizeBox = $false
+    $emailDialog.MinimizeBox = $false
+
+    $lblFrom = New-Object System.Windows.Forms.Label
+    $lblFrom.Text = "From (your email):"
+    $lblFrom.Location = New-Object System.Drawing.Point(20, 20)
+    $lblFrom.Size = New-Object System.Drawing.Size(120, 20)
+    $emailDialog.Controls.Add($lblFrom)
+
+    $txtFrom = New-Object System.Windows.Forms.TextBox
+    $txtFrom.Location = New-Object System.Drawing.Point(150, 18)
+    $txtFrom.Size = New-Object System.Drawing.Size(320, 20)
+    $emailDialog.Controls.Add($txtFrom)
+
+    $lblTo = New-Object System.Windows.Forms.Label
+    $lblTo.Text = "To (user):"
+    $lblTo.Location = New-Object System.Drawing.Point(20, 55)
+    $lblTo.Size = New-Object System.Drawing.Size(120, 20)
+    $emailDialog.Controls.Add($lblTo)
+
+    $txtTo = New-Object System.Windows.Forms.TextBox
+    $txtTo.Location = New-Object System.Drawing.Point(150, 53)
+    $txtTo.Size = New-Object System.Drawing.Size(320, 20)
+    $txtTo.ReadOnly = $true
+    $txtTo.Text = $userEmail
+    $emailDialog.Controls.Add($txtTo)
+
+    $lblCc = New-Object System.Windows.Forms.Label
+    $lblCc.Text = "CC (manager + you):"
+    $lblCc.Location = New-Object System.Drawing.Point(20, 90)
+    $lblCc.Size = New-Object System.Drawing.Size(120, 20)
+    $emailDialog.Controls.Add($lblCc)
+
+    $txtCcDisplay = New-Object System.Windows.Forms.TextBox
+    $txtCcDisplay.Location = New-Object System.Drawing.Point(150, 88)
+    $txtCcDisplay.Size = New-Object System.Drawing.Size(320, 20)
+    $txtCcDisplay.ReadOnly = $true
+    $txtCcDisplay.Text = if ($managerEmail) { "$managerEmail + you" } else { "you" }
+    $emailDialog.Controls.Add($txtCcDisplay)
+
+    $btnSend = New-Object System.Windows.Forms.Button
+    $btnSend.Text = "Send"
+    $btnSend.Location = New-Object System.Drawing.Point(260, 135)
+    $btnSend.Size = New-Object System.Drawing.Size(80, 30)
+    $btnSend.DialogResult = "OK"
+    $emailDialog.Controls.Add($btnSend)
+
+    $btnCancelEmail = New-Object System.Windows.Forms.Button
+    $btnCancelEmail.Text = "Cancel"
+    $btnCancelEmail.Location = New-Object System.Drawing.Point(350, 135)
+    $btnCancelEmail.Size = New-Object System.Drawing.Size(80, 30)
+    $btnCancelEmail.DialogResult = "Cancel"
+    $emailDialog.Controls.Add($btnCancelEmail)
+
+    $emailDialog.AcceptButton = $btnSend
+    $emailDialog.CancelButton = $btnCancelEmail
+
+    $dialogResult = $emailDialog.ShowDialog()
+
+    if ($dialogResult -ne "OK") {
+        return
+    }
+
+    $fromEmail = $txtFrom.Text.Trim()
+
+    if ([string]::IsNullOrWhiteSpace($fromEmail) -or (-not $fromEmail.Contains("@"))) {
+        [System.Windows.Forms.MessageBox]::Show("Please enter a valid sender email address.", "Invalid Email", "OK", "Warning")
+        return
+    }
+
+    $ccList = @()
+    if (-not [string]::IsNullOrWhiteSpace($managerEmail)) {
+        $ccList += $managerEmail
+    }
+    $ccList += $fromEmail
+    $ccString = [string]::Join(",", $ccList)
+
+    try {
+        Send-Email -SendTo $userEmail -AssetTag $assetTag -SerialNumber $selectedSerial -Model $model -EmailAdd $fromEmail -Cc $ccString
+        [System.Windows.Forms.MessageBox]::Show("Email sent successfully to $userEmail.", "Email Sent", "OK", "Information")
+    }
+    catch {
+        [System.Windows.Forms.MessageBox]::Show("Failed to send email: $($_.Exception.Message)", "Email Error", "OK", "Error")
+    }
 })
 
 # Check Device button (Device Lookup tab)
@@ -1647,6 +1841,127 @@ $btnShowDetailsLoaner.Add_Click({
     [void]$detailsForm.ShowDialog()
 })
 
+# Email User for selected loaner
+$btnEmailLoanerUser.Add_Click({
+    if ($dgvLoaners.SelectedRows.Count -eq 0) {
+        [System.Windows.Forms.MessageBox]::Show("Please select a loaner laptop to email the user about.", "No Selection", "OK", "Warning")
+        return
+    }
+
+    $selectedSerial = $dgvLoaners.SelectedRows[0].Cells["SerialNumber"].Value
+
+    # Get loaner info from inventory (for email fields)
+    $script:inventory = @(Load-Inventory)
+    $loanerInfo = $script:inventory | Where-Object { $_.SerialNumber -eq $selectedSerial }
+
+    if (-not $loanerInfo) {
+        [System.Windows.Forms.MessageBox]::Show("Unable to find this loaner in the inventory file.", "Not Found", "OK", "Error")
+        return
+    }
+
+    $userEmail = if ($loanerInfo.PSObject.Properties['AssignedEmail']) { $loanerInfo.AssignedEmail } else { "" }
+    $managerEmail = if ($loanerInfo.PSObject.Properties['ManagerEmail']) { $loanerInfo.ManagerEmail } else { "" }
+    $model = if ($loanerInfo.Model) { $loanerInfo.Model } else { "Unknown model" }
+    $assetTag = if ($loanerInfo.PSObject.Properties['AssetTag']) { $loanerInfo.AssetTag } else { "N/A" }
+
+    if ([string]::IsNullOrWhiteSpace($userEmail) -or $userEmail -eq "N/A") {
+        [System.Windows.Forms.MessageBox]::Show("This loaner does not have a valid user email address. Please ensure it is assigned and has an email.", "Missing User Email", "OK", "Warning")
+        return
+    }
+
+    # Dialog to capture sender email
+    $emailDialog = New-Object System.Windows.Forms.Form
+    $emailDialog.Text = "Send Laptop Verification Email"
+    $emailDialog.Size = New-Object System.Drawing.Size(500, 220)
+    $emailDialog.StartPosition = "CenterParent"
+    $emailDialog.FormBorderStyle = "FixedDialog"
+    $emailDialog.MaximizeBox = $false
+    $emailDialog.MinimizeBox = $false
+
+    $lblFrom = New-Object System.Windows.Forms.Label
+    $lblFrom.Text = "From (your email):"
+    $lblFrom.Location = New-Object System.Drawing.Point(20, 20)
+    $lblFrom.Size = New-Object System.Drawing.Size(120, 20)
+    $emailDialog.Controls.Add($lblFrom)
+
+    $txtFrom = New-Object System.Windows.Forms.TextBox
+    $txtFrom.Location = New-Object System.Drawing.Point(150, 18)
+    $txtFrom.Size = New-Object System.Drawing.Size(320, 20)
+    $emailDialog.Controls.Add($txtFrom)
+
+    $lblTo = New-Object System.Windows.Forms.Label
+    $lblTo.Text = "To (user):"
+    $lblTo.Location = New-Object System.Drawing.Point(20, 55)
+    $lblTo.Size = New-Object System.Drawing.Size(120, 20)
+    $emailDialog.Controls.Add($lblTo)
+
+    $txtTo = New-Object System.Windows.Forms.TextBox
+    $txtTo.Location = New-Object System.Drawing.Point(150, 53)
+    $txtTo.Size = New-Object System.Drawing.Size(320, 20)
+    $txtTo.ReadOnly = $true
+    $txtTo.Text = $userEmail
+    $emailDialog.Controls.Add($txtTo)
+
+    $lblCc = New-Object System.Windows.Forms.Label
+    $lblCc.Text = "CC (manager + you):"
+    $lblCc.Location = New-Object System.Drawing.Point(20, 90)
+    $lblCc.Size = New-Object System.Drawing.Size(120, 20)
+    $emailDialog.Controls.Add($lblCc)
+
+    $txtCc = New-Object System.Windows.Forms.TextBox
+    $txtCc.Location = New-Object System.Drawing.Point(150, 88)
+    $txtCc.Size = New-Object System.Drawing.Size(320, 20)
+    $txtCc.ReadOnly = $true
+    $txtCc.Text = $managerEmail
+    $emailDialog.Controls.Add($txtCc)
+
+    $btnSend = New-Object System.Windows.Forms.Button
+    $btnSend.Text = "Send"
+    $btnSend.Location = New-Object System.Drawing.Point(260, 135)
+    $btnSend.Size = New-Object System.Drawing.Size(80, 30)
+    $btnSend.DialogResult = "OK"
+    $emailDialog.Controls.Add($btnSend)
+
+    $btnCancel = New-Object System.Windows.Forms.Button
+    $btnCancel.Text = "Cancel"
+    $btnCancel.Location = New-Object System.Drawing.Point(350, 135)
+    $btnCancel.Size = New-Object System.Drawing.Size(80, 30)
+    $btnCancel.DialogResult = "Cancel"
+    $emailDialog.Controls.Add($btnCancel)
+
+    $emailDialog.AcceptButton = $btnSend
+    $emailDialog.CancelButton = $btnCancel
+
+    $dialogResult = $emailDialog.ShowDialog()
+
+    if ($dialogResult -ne "OK") {
+        return
+    }
+
+    $fromEmail = $txtFrom.Text.Trim()
+
+    if ([string]::IsNullOrWhiteSpace($fromEmail) -or (-not $fromEmail.Contains("@"))) {
+        [System.Windows.Forms.MessageBox]::Show("Please enter a valid sender email address.", "Invalid Email", "OK", "Warning")
+        return
+    }
+
+    # Build CC list: manager (if any) + sender
+    $ccList = @()
+    if (-not [string]::IsNullOrWhiteSpace($managerEmail) -and $managerEmail -ne "N/A") {
+        $ccList += $managerEmail
+    }
+    $ccList += $fromEmail
+    $ccString = [string]::Join(",", $ccList)
+
+    try {
+        Send-Email -SendTo $userEmail -Date (Get-Date -Format "MM/dd/yyyy") -AssetTag $assetTag -SerialNumber $selectedSerial -Model $model -EmailAdd $fromEmail -Cc $ccString
+        [System.Windows.Forms.MessageBox]::Show("Email sent successfully to $userEmail.", "Email Sent", "OK", "Information")
+    }
+    catch {
+        [System.Windows.Forms.MessageBox]::Show("Failed to send email: $($_.Exception.Message)", "Email Error", "OK", "Error")
+    }
+})
+
 # Function to update loaner list
 function Update-LoanerList {
     param(
@@ -1704,10 +2019,13 @@ function Update-LoanerList {
             $status = $row.Cells["Status"].Value
             if ($status -eq "Online") {
                 $row.DefaultCellStyle.BackColor = [System.Drawing.Color]::LightGreen
+                $row.Cells["Status"].Style.ForeColor = [System.Drawing.Color]::Green
             } elseif ($status -eq "Offline") {
                 $row.DefaultCellStyle.BackColor = [System.Drawing.Color]::LightCoral
+                $row.Cells["Status"].Style.ForeColor = [System.Drawing.Color]::Red
             } elseif ($status -eq "DNS Error") {
                 $row.DefaultCellStyle.BackColor = [System.Drawing.Color]::LightYellow
+                $row.Cells["Status"].Style.ForeColor = [System.Drawing.Color]::DarkOrange
             }
         }
     }
@@ -1751,6 +2069,66 @@ function Update-InventoryGrid {
     $dgvInventory.DataSource = $dt
 }
 
+function Send-Email {
+    param (
+        [Parameter(Mandatory=$true)]
+        [string]$SendTo,
+
+        [Parameter(Mandatory=$false)]
+        [string]$Date = (Get-Date -Format "MM/dd/yyyy"),
+
+        [Parameter(Mandatory=$true)]
+        [string]$AssetTag,
+
+        [Parameter(Mandatory=$true)]
+        [string]$SerialNumber,
+
+        [Parameter(Mandatory=$true)]
+        [string]$Model,
+
+        [Parameter(Mandatory=$true)]
+        [string]$EmailAdd,
+
+        [Parameter(Mandatory=$false)]
+        [string]$Cc
+    )
+
+    $Body = @"
+Hi,
+
+I'm checking on the status of a company-issued laptop and need to confirm whether you currently have the following device:
+
+    Model:       $Model
+    Asset Tag:   $AssetTag
+    Serial #:    $SerialNumber
+
+If you DO have this laptop, please reply and let me know that it's in your possession.
+
+If you DO NOT have this laptop, please reply "No" and include any details you may know (returned to IT, transferred to another user, replaced, etc.).
+
+Thanks for your help.
+
+Regards,
+Brian Fontaine
+"@
+
+    $SMTP = "apprelay.mcgladrey.rsm.net"
+
+    $mailParams = @{
+        From       = $EmailAdd
+        To         = $SendTo
+        Subject    = "Laptop Verification - $Model ($AssetTag) - $Date"
+        Body       = $Body
+        SmtpServer = $SMTP
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($Cc)) {
+        $mailParams.Cc = $Cc
+    }
+
+    Send-MailMessage @mailParams
+}
+
 # Initialize inventory display
 Update-InventoryGrid
 Update-LoanerList
@@ -1758,3 +2136,4 @@ Update-LoanerList
 # Show form
 $form.Add_Shown({$form.Activate()})
 [void]$form.ShowDialog()
+
