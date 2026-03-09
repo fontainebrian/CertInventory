@@ -12,8 +12,10 @@ $scriptPath = if ([string]::IsNullOrWhiteSpace($PSScriptRoot)) {
     $PSScriptRoot 
 }
 $script:inventoryFile = Join-Path $scriptPath "inventory.json"
+$script:missingFile = Join-Path $scriptPath "missing.json"
 $script:csvData = @()
 $script:inventory = @()
+$script:missingLaptops = @()
 
 # Load inventory from JSON file
 function Load-Inventory {
@@ -50,8 +52,36 @@ function Save-Inventory {
     }
 }
 
+# Load missing laptops from JSON file
+function Load-MissingLaptops {
+    if (Test-Path $script:missingFile) {
+        try {
+            $content = Get-Content $script:missingFile -Raw
+            if ([string]::IsNullOrWhiteSpace($content)) { return @() }
+            $json = $content | ConvertFrom-Json
+            if ($null -eq $json) { return @() }
+            return @($json)
+        }
+        catch {
+            Write-Host "Error loading missing laptops: $($_.Exception.Message)"
+            return @()
+        }
+    }
+    return @()
+}
+
+# Save missing laptops to JSON file
+function Save-MissingLaptops {
+    if ($null -eq $script:missingLaptops -or $script:missingLaptops.Count -eq 0) {
+        "[]" | Set-Content $script:missingFile
+    } else {
+        $script:missingLaptops | ConvertTo-Json -Depth 10 | Set-Content $script:missingFile
+    }
+}
+
 # Initialize inventory
 $script:inventory = Load-Inventory
+$script:missingLaptops = Load-MissingLaptops
 
 # Create main form
 $form = New-Object System.Windows.Forms.Form
@@ -134,6 +164,14 @@ $btnEmailCsvUser.Location = New-Object System.Drawing.Point(560, 53)
 $btnEmailCsvUser.Size = New-Object System.Drawing.Size(100, 25)
 $btnEmailCsvUser.Enabled = $false
 $tabImport.Controls.Add($btnEmailCsvUser)
+
+# Add to Missing Laptops Button (CSV tab)
+$btnAddToMissing = New-Object System.Windows.Forms.Button
+$btnAddToMissing.Text = "Add to Missing Laptops"
+$btnAddToMissing.Location = New-Object System.Drawing.Point(670, 53)
+$btnAddToMissing.Size = New-Object System.Drawing.Size(160, 25)
+$btnAddToMissing.Enabled = $false
+$tabImport.Controls.Add($btnAddToMissing)
 
 $dgvCsv = New-Object System.Windows.Forms.DataGridView
 $dgvCsv.Location = New-Object System.Drawing.Point(10, 85)
@@ -433,11 +471,65 @@ $btnEmailLoanerUser.Location = New-Object System.Drawing.Point(820, 555)
 $btnEmailLoanerUser.Size = New-Object System.Drawing.Size(100, 30)
 $tabLoaner.Controls.Add($btnEmailLoanerUser)
 
+# Tab 5: Missing Laptops
+$tabMissing = New-Object System.Windows.Forms.TabPage
+$tabMissing.Text = "Missing Laptops"
+
+$lblMissingList = New-Object System.Windows.Forms.Label
+$lblMissingList.Text = "Missing Laptops:"
+$lblMissingList.Location = New-Object System.Drawing.Point(10, 20)
+$lblMissingList.Size = New-Object System.Drawing.Size(150, 20)
+$tabMissing.Controls.Add($lblMissingList)
+
+$dgvMissing = New-Object System.Windows.Forms.DataGridView
+$dgvMissing.Location = New-Object System.Drawing.Point(10, 45)
+$dgvMissing.Size = New-Object System.Drawing.Size(1135, 500)
+$dgvMissing.AllowUserToAddRows = $false
+$dgvMissing.AllowUserToDeleteRows = $false
+$dgvMissing.ReadOnly = $true
+$dgvMissing.AutoSizeColumnsMode = "Fill"
+$dgvMissing.SelectionMode = "FullRowSelect"
+
+# Context menu for Missing grid - copy serial number
+$contextMenuMissing = New-Object System.Windows.Forms.ContextMenuStrip
+$menuItemCopyMissingSerial = New-Object System.Windows.Forms.ToolStripMenuItem
+$menuItemCopyMissingSerial.Text = "Copy Serial Number"
+$menuItemCopyMissingSerial.Add_Click({
+    if ($dgvMissing.SelectedRows.Count -gt 0) {
+        $val = $dgvMissing.SelectedRows[0].Cells["SerialNumber"].Value
+        if ($null -ne $val -and $val -ne "") {
+            [System.Windows.Forms.Clipboard]::SetText($val)
+        }
+    }
+})
+$contextMenuMissing.Items.Add($menuItemCopyMissingSerial) | Out-Null
+$dgvMissing.ContextMenuStrip = $contextMenuMissing
+$tabMissing.Controls.Add($dgvMissing)
+
+$btnRemoveMissing = New-Object System.Windows.Forms.Button
+$btnRemoveMissing.Text = "Remove Selected"
+$btnRemoveMissing.Location = New-Object System.Drawing.Point(10, 555)
+$btnRemoveMissing.Size = New-Object System.Drawing.Size(130, 30)
+$tabMissing.Controls.Add($btnRemoveMissing)
+
+$btnRefreshMissing = New-Object System.Windows.Forms.Button
+$btnRefreshMissing.Text = "Refresh"
+$btnRefreshMissing.Location = New-Object System.Drawing.Point(150, 555)
+$btnRefreshMissing.Size = New-Object System.Drawing.Size(80, 30)
+$tabMissing.Controls.Add($btnRefreshMissing)
+
+$btnEmailMissingUser = New-Object System.Windows.Forms.Button
+$btnEmailMissingUser.Text = "Email User"
+$btnEmailMissingUser.Location = New-Object System.Drawing.Point(240, 555)
+$btnEmailMissingUser.Size = New-Object System.Drawing.Size(100, 30)
+$tabMissing.Controls.Add($btnEmailMissingUser)
+
 # Add tabs to control
 $tabControl.TabPages.Add($tabImport)
 $tabControl.TabPages.Add($tabInventory)
 $tabControl.TabPages.Add($tabLookup)
 $tabControl.TabPages.Add($tabLoaner)
+$tabControl.TabPages.Add($tabMissing)
 $form.Controls.Add($tabControl)
 
 # Event Handlers
@@ -468,14 +560,22 @@ $btnLoadCsv.Add_Click({
                 $dt.Columns.Add($_) | Out-Null
             }
             
-            # Add Pingable column
-            $dt.Columns.Add("Pingable") | Out-Null
-            
+            # Add extra columns
+            $dt.Columns.Add("Pingable")     | Out-Null
+            $dt.Columns.Add("In AD")        | Out-Null
+            $dt.Columns.Add("User in AD?")  | Out-Null
+            $dt.Columns.Add("Missing?")     | Out-Null
+
             # Show progress message
             $form.Cursor = [System.Windows.Forms.Cursors]::WaitCursor
             $dgvCsv.DataSource = $null
-            
-            # Add rows and test ping for each
+
+            # Pre-load missing list once for fast lookups
+            $currentMissing = Load-MissingLaptops
+            $missingSerials = @{}
+            foreach ($m in $currentMissing) { $missingSerials[$m.SerialNumber.Trim()] = $true }
+
+            # Add rows and test ping / AD / missing for each
             $counter = 0
             foreach ($row in $script:csvData) {
                 $counter++
@@ -495,15 +595,78 @@ $btnLoadCsv.Add_Click({
                     }
                 }
                 catch {
-                    # If there's an error, try to determine if it's truly offline or a DNS issue
                     if ($_.Exception.Message -like "*could not be resolved*" -or $_.Exception.Message -like "*host not found*") {
                         $pingable = "DNS Error"
                     } else {
                         $pingable = "Offline"
                     }
                 }
-                
                 $dr["Pingable"] = $pingable
+
+                # Check Active Directory
+                $inAD = "No"
+                try {
+                    Get-ADComputer -Identity $row.serial_number -ErrorAction Stop | Out-Null
+                    $inAD = "Yes"
+                }
+                catch { }
+                $dr["In AD"] = $inAD
+
+                # Check if assigned user is in Active Directory
+                $userInAD = "No"
+                $assignedUser = if ($row.PSObject.Properties['assigned_to']) { $row.assigned_to.Trim() } else { "" }
+                if (-not [string]::IsNullOrWhiteSpace($assignedUser)) {
+                    $foundUser = $false
+                    $safeName = $assignedUser -replace "'", "''"
+
+                    # 1. Exact DisplayName match
+                    if (-not $foundUser) {
+                        try {
+                            $r = @(Get-ADUser -Filter "DisplayName -eq '$safeName'" -ErrorAction Stop)
+                            if ($r.Count -gt 0) { $foundUser = $true }
+                        } catch { }
+                    }
+
+                    # 2. Exact Name (CN) match
+                    if (-not $foundUser) {
+                        try {
+                            $r = @(Get-ADUser -Filter "Name -eq '$safeName'" -ErrorAction Stop)
+                            if ($r.Count -gt 0) { $foundUser = $true }
+                        } catch { }
+                    }
+
+                    # 3. Split "First Last" into GivenName + Surname
+                    if (-not $foundUser -and $assignedUser -match ' ') {
+                        try {
+                            $nameParts = $assignedUser -split '\s+', 2
+                            $firstName = $nameParts[0].Trim() -replace "'", "''"
+                            $lastName  = $nameParts[1].Trim() -replace "'", "''"
+                            $r = @(Get-ADUser -Filter "GivenName -eq '$firstName' -and Surname -eq '$lastName'" -ErrorAction Stop)
+                            if ($r.Count -gt 0) { $foundUser = $true }
+                        } catch { }
+                    }
+
+                    # 4. If "Last, First" format, flip and try GivenName + Surname
+                    if (-not $foundUser -and $assignedUser -match ',') {
+                        try {
+                            $parts = $assignedUser -split ',', 2
+                            $firstName = $parts[1].Trim() -replace "'", "''"
+                            $lastName  = $parts[0].Trim() -replace "'", "''"
+                            $r = @(Get-ADUser -Filter "GivenName -eq '$firstName' -and Surname -eq '$lastName'" -ErrorAction Stop)
+                            if ($r.Count -gt 0) { $foundUser = $true }
+                        } catch { }
+                    }
+
+                    Write-Host "User AD check: '$assignedUser' => $foundUser"
+                    $userInAD = if ($foundUser) { "Yes" } else { "No" }
+                } else {
+                    $userInAD = "N/A"
+                }
+                $dr["User in AD?"] = $userInAD
+
+                # Check missing list
+                $dr["Missing?"] = if ($missingSerials.ContainsKey($row.serial_number.Trim())) { "Yes" } else { "No" }
+
                 $dt.Rows.Add($dr)
             }
             
@@ -511,21 +674,45 @@ $btnLoadCsv.Add_Click({
             
             $dgvCsv.DataSource = $dt
 
-            # Color code Pingable column text
+            # Color code the new and existing status columns
             foreach ($row in $dgvCsv.Rows) {
-                $status = $row.Cells["Pingable"].Value
-                if ($status -eq "Online") {
+                # Pingable
+                $pingStatus = $row.Cells["Pingable"].Value
+                if ($pingStatus -eq "Online") {
                     $row.Cells["Pingable"].Style.ForeColor = [System.Drawing.Color]::Green
-                } elseif ($status -eq "Offline") {
+                } elseif ($pingStatus -eq "Offline") {
                     $row.Cells["Pingable"].Style.ForeColor = [System.Drawing.Color]::Red
-                } elseif ($status -eq "DNS Error") {
+                } elseif ($pingStatus -eq "DNS Error") {
                     $row.Cells["Pingable"].Style.ForeColor = [System.Drawing.Color]::DarkOrange
+                }
+
+                # In AD
+                if ($row.Cells["In AD"].Value -eq "Yes") {
+                    $row.Cells["In AD"].Style.ForeColor = [System.Drawing.Color]::Green
+                } else {
+                    $row.Cells["In AD"].Style.ForeColor = [System.Drawing.Color]::Red
+                }
+
+                # User in AD?
+                switch ($row.Cells["User in AD?"].Value) {
+                    "Yes" { $row.Cells["User in AD?"].Style.ForeColor = [System.Drawing.Color]::Green }
+                    "No"  { $row.Cells["User in AD?"].Style.ForeColor = [System.Drawing.Color]::Red }
+                    "N/A" { $row.Cells["User in AD?"].Style.ForeColor = [System.Drawing.Color]::Gray }
+                }
+
+                # Missing?
+                if ($row.Cells["Missing?"].Value -eq "Yes") {
+                    $row.Cells["Missing?"].Style.ForeColor  = [System.Drawing.Color]::Red
+                    $row.Cells["Missing?"].Style.Font = New-Object System.Drawing.Font($dgvCsv.Font, [System.Drawing.FontStyle]::Bold)
+                } else {
+                    $row.Cells["Missing?"].Style.ForeColor = [System.Drawing.Color]::Green
                 }
             }
             $btnCompare.Enabled = $true
             $btnAddFromCsv.Enabled = $true
             $btnShowDetailsCsv.Enabled = $true
             $btnEmailCsvUser.Enabled = $true
+            $btnAddToMissing.Enabled = $true
             [System.Windows.Forms.MessageBox]::Show("CSV file loaded successfully! Found $($script:csvData.Count) records.", "Success", "OK", "Information")
         }
     }
@@ -1962,6 +2149,169 @@ $btnEmailLoanerUser.Add_Click({
     }
 })
 
+# Add to Missing Laptops button (CSV tab)
+$btnAddToMissing.Add_Click({
+    if ($dgvCsv.SelectedRows.Count -eq 0) {
+        [System.Windows.Forms.MessageBox]::Show("Please select a laptop from the CSV list.", "No Selection", "OK", "Warning")
+        return
+    }
+
+    $script:missingLaptops = Load-MissingLaptops
+    $addedCount = 0
+    $skippedItems = @()
+
+    foreach ($selectedRow in $dgvCsv.SelectedRows) {
+        $rowIndex = $selectedRow.Index
+        $csvItem = $script:csvData[$rowIndex]
+
+        $serial = $csvItem.serial_number
+        $model = if ($csvItem.model) { $csvItem.model } else { "" }
+        $assetTag = if ($csvItem.PSObject.Properties['asset_tag'] -and $csvItem.asset_tag) { $csvItem.asset_tag } else { "N/A" }
+        $assignedTo = if ($csvItem.PSObject.Properties['assigned_to'] -and $csvItem.assigned_to) { $csvItem.assigned_to } else { "" }
+        $csvStatus = if ($csvItem.PSObject.Properties['install_status'] -and $csvItem.install_status) { $csvItem.install_status } else { "" }
+        $csvLocation = if ($csvItem.PSObject.Properties['stockroom'] -and $csvItem.stockroom) { $csvItem.stockroom } else { "" }
+
+        $existing = $script:missingLaptops | Where-Object { $_.SerialNumber.Trim() -eq $serial.Trim() }
+        if ($existing) {
+            $skippedItems += $serial
+            continue
+        }
+
+        $newMissing = [PSCustomObject]@{
+            SerialNumber = $serial
+            Model        = $model
+            AssetTag     = $assetTag
+            AssignedTo   = $assignedTo
+            CSVStatus    = $csvStatus
+            CSVLocation  = $csvLocation
+            DateMarked   = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
+        }
+        $script:missingLaptops = @($script:missingLaptops) + @($newMissing)
+        $addedCount++
+    }
+
+    Save-MissingLaptops
+    Update-MissingLaptopsList
+
+    $message = "Added $addedCount laptop(s) to Missing Laptops."
+    if ($skippedItems.Count -gt 0) {
+        $message += "`n`nAlready in Missing Laptops (skipped):`n" + ($skippedItems -join "`n")
+    }
+    [System.Windows.Forms.MessageBox]::Show($message, "Missing Laptops Updated", "OK", "Information")
+})
+
+# Remove from Missing Laptops button
+$btnRemoveMissing.Add_Click({
+    if ($dgvMissing.SelectedRows.Count -eq 0) {
+        [System.Windows.Forms.MessageBox]::Show("Please select a laptop to remove.", "No Selection", "OK", "Warning")
+        return
+    }
+
+    $selectedSerial = $dgvMissing.SelectedRows[0].Cells["SerialNumber"].Value
+    $result = [System.Windows.Forms.MessageBox]::Show("Remove '$selectedSerial' from Missing Laptops?", "Confirm Removal", "YesNo", "Question")
+
+    if ($result -eq "Yes") {
+        $script:missingLaptops = @(Load-MissingLaptops | Where-Object { $_.SerialNumber -ne $selectedSerial })
+        Save-MissingLaptops
+        Update-MissingLaptopsList
+    }
+})
+
+# Refresh Missing Laptops button
+$btnRefreshMissing.Add_Click({
+    Update-MissingLaptopsList
+})
+
+# Email User from Missing Laptops tab
+$btnEmailMissingUser.Add_Click({
+    if ($dgvMissing.SelectedRows.Count -eq 0) {
+        [System.Windows.Forms.MessageBox]::Show("Please select a missing laptop.", "No Selection", "OK", "Warning")
+        return
+    }
+
+    $selectedSerial = $dgvMissing.SelectedRows[0].Cells["SerialNumber"].Value
+    $script:missingLaptops = Load-MissingLaptops
+    $missingItem = $script:missingLaptops | Where-Object { $_.SerialNumber -eq $selectedSerial }
+
+    if (-not $missingItem) {
+        [System.Windows.Forms.MessageBox]::Show("Unable to find this entry.", "Not Found", "OK", "Error")
+        return
+    }
+
+    $assignedTo = $missingItem.AssignedTo
+    $model = if ($missingItem.Model) { $missingItem.Model } else { "Unknown Model" }
+    $assetTag = if ($missingItem.AssetTag) { $missingItem.AssetTag } else { "N/A" }
+
+    if ([string]::IsNullOrWhiteSpace($assignedTo)) {
+        [System.Windows.Forms.MessageBox]::Show("No assigned user recorded for this laptop.", "No User", "OK", "Warning")
+        return
+    }
+
+    $userEmail = ""
+    $managerEmail = ""
+    try {
+        $form.Cursor = [System.Windows.Forms.Cursors]::WaitCursor
+        $adUser = Get-ADUser -Identity $assignedTo -Properties EmailAddress, Manager -ErrorAction Stop
+        $userEmail = if ($adUser.EmailAddress) { $adUser.EmailAddress } else { "" }
+        if ($adUser.Manager) {
+            try {
+                $mgr = Get-ADUser -Identity $adUser.Manager -Properties EmailAddress -ErrorAction Stop
+                $managerEmail = if ($mgr.EmailAddress) { $mgr.EmailAddress } else { "" }
+            } catch { }
+        }
+        $form.Cursor = [System.Windows.Forms.Cursors]::Default
+    }
+    catch {
+        $form.Cursor = [System.Windows.Forms.Cursors]::Default
+        [System.Windows.Forms.MessageBox]::Show("Could not look up '$assignedTo' in Active Directory: $($_.Exception.Message)", "AD Lookup Error", "OK", "Error")
+        return
+    }
+
+    if ([string]::IsNullOrWhiteSpace($userEmail)) {
+        [System.Windows.Forms.MessageBox]::Show("User '$assignedTo' has no email address in Active Directory.", "No Email", "OK", "Warning")
+        return
+    }
+
+    $emailDialog = New-Object System.Windows.Forms.Form
+    $emailDialog.Text = "Send Laptop Verification Email"
+    $emailDialog.Size = New-Object System.Drawing.Size(500, 220)
+    $emailDialog.StartPosition = "CenterParent"
+    $emailDialog.FormBorderStyle = "FixedDialog"
+    $emailDialog.MaximizeBox = $false
+    $emailDialog.MinimizeBox = $false
+
+    $lFrom = New-Object System.Windows.Forms.Label; $lFrom.Text = "From (your email):"; $lFrom.Location = New-Object System.Drawing.Point(20,20); $lFrom.Size = New-Object System.Drawing.Size(120,20); $emailDialog.Controls.Add($lFrom)
+    $tFrom = New-Object System.Windows.Forms.TextBox; $tFrom.Location = New-Object System.Drawing.Point(150,18); $tFrom.Size = New-Object System.Drawing.Size(320,20); $emailDialog.Controls.Add($tFrom)
+    $lTo = New-Object System.Windows.Forms.Label; $lTo.Text = "To (user):"; $lTo.Location = New-Object System.Drawing.Point(20,55); $lTo.Size = New-Object System.Drawing.Size(120,20); $emailDialog.Controls.Add($lTo)
+    $tTo = New-Object System.Windows.Forms.TextBox; $tTo.Location = New-Object System.Drawing.Point(150,53); $tTo.Size = New-Object System.Drawing.Size(320,20); $tTo.ReadOnly = $true; $tTo.Text = $userEmail; $emailDialog.Controls.Add($tTo)
+    $lCc = New-Object System.Windows.Forms.Label; $lCc.Text = "CC (manager + you):"; $lCc.Location = New-Object System.Drawing.Point(20,90); $lCc.Size = New-Object System.Drawing.Size(120,20); $emailDialog.Controls.Add($lCc)
+    $tCc = New-Object System.Windows.Forms.TextBox; $tCc.Location = New-Object System.Drawing.Point(150,88); $tCc.Size = New-Object System.Drawing.Size(320,20); $tCc.ReadOnly = $true; $tCc.Text = if ($managerEmail) { "$managerEmail + you" } else { "you" }; $emailDialog.Controls.Add($tCc)
+
+    $bSend = New-Object System.Windows.Forms.Button; $bSend.Text = "Send"; $bSend.Location = New-Object System.Drawing.Point(260,135); $bSend.Size = New-Object System.Drawing.Size(80,30); $bSend.DialogResult = "OK"; $emailDialog.Controls.Add($bSend)
+    $bCancel = New-Object System.Windows.Forms.Button; $bCancel.Text = "Cancel"; $bCancel.Location = New-Object System.Drawing.Point(350,135); $bCancel.Size = New-Object System.Drawing.Size(80,30); $bCancel.DialogResult = "Cancel"; $emailDialog.Controls.Add($bCancel)
+    $emailDialog.AcceptButton = $bSend; $emailDialog.CancelButton = $bCancel
+
+    if ($emailDialog.ShowDialog() -ne "OK") { return }
+
+    $fromEmail = $tFrom.Text.Trim()
+    if ([string]::IsNullOrWhiteSpace($fromEmail) -or (-not $fromEmail.Contains("@"))) {
+        [System.Windows.Forms.MessageBox]::Show("Please enter a valid sender email address.", "Invalid Email", "OK", "Warning")
+        return
+    }
+
+    $ccList = @()
+    if (-not [string]::IsNullOrWhiteSpace($managerEmail)) { $ccList += $managerEmail }
+    $ccList += $fromEmail
+
+    try {
+        Send-Email -SendTo $userEmail -AssetTag $assetTag -SerialNumber $selectedSerial -Model $model -EmailAdd $fromEmail -Cc ([string]::Join(",", $ccList))
+        [System.Windows.Forms.MessageBox]::Show("Email sent successfully to $userEmail.", "Email Sent", "OK", "Information")
+    }
+    catch {
+        [System.Windows.Forms.MessageBox]::Show("Failed to send email: $($_.Exception.Message)", "Email Error", "OK", "Error")
+    }
+})
+
 # Function to update loaner list
 function Update-LoanerList {
     param(
@@ -2129,9 +2479,43 @@ Brian Fontaine
     Send-MailMessage @mailParams
 }
 
+function Update-MissingLaptopsList {
+    $script:missingLaptops = Load-MissingLaptops
+
+    $dt = New-Object System.Data.DataTable
+    $dt.Columns.Add("SerialNumber") | Out-Null
+    $dt.Columns.Add("Model")        | Out-Null
+    $dt.Columns.Add("AssetTag")     | Out-Null
+    $dt.Columns.Add("AssignedTo")   | Out-Null
+    $dt.Columns.Add("CSVStatus")    | Out-Null
+    $dt.Columns.Add("CSVLocation")  | Out-Null
+    $dt.Columns.Add("DateMarked")   | Out-Null
+
+    foreach ($item in $script:missingLaptops) {
+        $dr = $dt.NewRow()
+        $dr["SerialNumber"] = $item.SerialNumber
+        $dr["Model"]        = if ($item.Model)       { $item.Model }       else { "" }
+        $dr["AssetTag"]     = if ($item.AssetTag)    { $item.AssetTag }    else { "N/A" }
+        $dr["AssignedTo"]   = if ($item.AssignedTo)  { $item.AssignedTo }  else { "" }
+        $dr["CSVStatus"]    = if ($item.CSVStatus)   { $item.CSVStatus }   else { "" }
+        $dr["CSVLocation"]  = if ($item.CSVLocation) { $item.CSVLocation } else { "" }
+        $dr["DateMarked"]   = $item.DateMarked
+        $dt.Rows.Add($dr)
+    }
+
+    $dgvMissing.DataSource = $dt
+
+    # Highlight rows red to make it obvious these are missing
+    foreach ($row in $dgvMissing.Rows) {
+        $row.DefaultCellStyle.BackColor = [System.Drawing.Color]::MistyRose
+        $row.DefaultCellStyle.ForeColor = [System.Drawing.Color]::DarkRed
+    }
+}
+
 # Initialize inventory display
 Update-InventoryGrid
 Update-LoanerList
+Update-MissingLaptopsList
 
 # Show form
 $form.Add_Shown({$form.Activate()})
