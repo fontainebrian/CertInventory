@@ -1,4 +1,4 @@
-﻿# Laptop Inventory Management Application
+# Laptop Inventory Management Application
 # Allows importing CSV, comparing with in-stock inventory, and managing inventory
 
 Add-Type -AssemblyName System.Windows.Forms
@@ -13,9 +13,11 @@ $scriptPath = if ([string]::IsNullOrWhiteSpace($PSScriptRoot)) {
 }
 $script:inventoryFile = Join-Path $scriptPath "inventory.json"
 $script:missingFile = Join-Path $scriptPath "missing.json"
+$script:awaitingFile = Join-Path $scriptPath "awaiting_verification.json"
 $script:csvData = @()
 $script:inventory = @()
 $script:missingLaptops = @()
+$script:awaitingVerification = @()
 
 # Load inventory from JSON file
 function Load-Inventory {
@@ -79,9 +81,37 @@ function Save-MissingLaptops {
     }
 }
 
+# Load awaiting verification entries from JSON file
+function Load-AwaitingVerification {
+    if (Test-Path $script:awaitingFile) {
+        try {
+            $content = Get-Content $script:awaitingFile -Raw
+            if ([string]::IsNullOrWhiteSpace($content)) { return @() }
+            $json = $content | ConvertFrom-Json
+            if ($null -eq $json) { return @() }
+            return @($json)
+        }
+        catch {
+            Write-Host "Error loading awaiting verification: $($_.Exception.Message)"
+            return @()
+        }
+    }
+    return @()
+}
+
+# Save awaiting verification entries to JSON file
+function Save-AwaitingVerification {
+    if ($null -eq $script:awaitingVerification -or $script:awaitingVerification.Count -eq 0) {
+        "[]" | Set-Content $script:awaitingFile
+    } else {
+        $script:awaitingVerification | ConvertTo-Json -Depth 10 | Set-Content $script:awaitingFile
+    }
+}
+
 # Initialize inventory
 $script:inventory = Load-Inventory
 $script:missingLaptops = Load-MissingLaptops
+$script:awaitingVerification = Load-AwaitingVerification
 
 # Create main form
 $form = New-Object System.Windows.Forms.Form
@@ -524,12 +554,128 @@ $btnEmailMissingUser.Location = New-Object System.Drawing.Point(240, 555)
 $btnEmailMissingUser.Size = New-Object System.Drawing.Size(100, 30)
 $tabMissing.Controls.Add($btnEmailMissingUser)
 
+# Tab 6: Awaiting Verification
+$tabAwaiting = New-Object System.Windows.Forms.TabPage
+$tabAwaiting.Text = "Awaiting Verification"
+
+$lblAwaitingList = New-Object System.Windows.Forms.Label
+$lblAwaitingList.Text = "Laptops awaiting verification (email sent, response pending):"
+$lblAwaitingList.Location = New-Object System.Drawing.Point(10, 20)
+$lblAwaitingList.Size = New-Object System.Drawing.Size(600, 20)
+$tabAwaiting.Controls.Add($lblAwaitingList)
+
+$dgvAwaiting = New-Object System.Windows.Forms.DataGridView
+$dgvAwaiting.Location = New-Object System.Drawing.Point(10, 45)
+$dgvAwaiting.Size = New-Object System.Drawing.Size(1135, 500)
+$dgvAwaiting.AllowUserToAddRows = $false
+$dgvAwaiting.AllowUserToDeleteRows = $false
+$dgvAwaiting.ReadOnly = $true
+$dgvAwaiting.AutoSizeColumnsMode = "Fill"
+$dgvAwaiting.SelectionMode = "FullRowSelect"
+
+# Context menu for Awaiting grid - copy serial number
+$contextMenuAwaiting = New-Object System.Windows.Forms.ContextMenuStrip
+$menuItemCopyAwaitingSerial = New-Object System.Windows.Forms.ToolStripMenuItem
+$menuItemCopyAwaitingSerial.Text = "Copy Serial Number"
+$menuItemCopyAwaitingSerial.Add_Click({
+    if ($dgvAwaiting.SelectedRows.Count -gt 0) {
+        $val = $dgvAwaiting.SelectedRows[0].Cells["SerialNumber"].Value
+        if ($null -ne $val -and $val -ne "") {
+            [System.Windows.Forms.Clipboard]::SetText($val)
+        }
+    }
+})
+$contextMenuAwaiting.Items.Add($menuItemCopyAwaitingSerial) | Out-Null
+$dgvAwaiting.ContextMenuStrip = $contextMenuAwaiting
+$tabAwaiting.Controls.Add($dgvAwaiting)
+
+$btnRemoveAwaiting = New-Object System.Windows.Forms.Button
+$btnRemoveAwaiting.Text = "Mark Verified (Remove)"
+$btnRemoveAwaiting.Location = New-Object System.Drawing.Point(10, 555)
+$btnRemoveAwaiting.Size = New-Object System.Drawing.Size(160, 30)
+$tabAwaiting.Controls.Add($btnRemoveAwaiting)
+
+$btnRefreshAwaiting = New-Object System.Windows.Forms.Button
+$btnRefreshAwaiting.Text = "Refresh"
+$btnRefreshAwaiting.Location = New-Object System.Drawing.Point(180, 555)
+$btnRefreshAwaiting.Size = New-Object System.Drawing.Size(80, 30)
+$tabAwaiting.Controls.Add($btnRefreshAwaiting)
+
+$btnEmailAwaitingUser = New-Object System.Windows.Forms.Button
+$btnEmailAwaitingUser.Text = "Re-send Email"
+$btnEmailAwaitingUser.Location = New-Object System.Drawing.Point(270, 555)
+$btnEmailAwaitingUser.Size = New-Object System.Drawing.Size(120, 30)
+$tabAwaiting.Controls.Add($btnEmailAwaitingUser)
+
+# Tab 7: Needs Verification
+$tabNeedsVerification = New-Object System.Windows.Forms.TabPage
+$tabNeedsVerification.Text = "Needs Verification"
+
+$lblNeedsVerification = New-Object System.Windows.Forms.Label
+$lblNeedsVerification.Text = "Devices that need verification (run 'Run Verification' on the CSV tab first):"
+$lblNeedsVerification.Location = New-Object System.Drawing.Point(10, 20)
+$lblNeedsVerification.Size = New-Object System.Drawing.Size(700, 20)
+$tabNeedsVerification.Controls.Add($lblNeedsVerification)
+
+$dgvNeedsVerification = New-Object System.Windows.Forms.DataGridView
+$dgvNeedsVerification.Location = New-Object System.Drawing.Point(10, 45)
+$dgvNeedsVerification.Size = New-Object System.Drawing.Size(1135, 490)
+$dgvNeedsVerification.AllowUserToAddRows = $false
+$dgvNeedsVerification.AllowUserToDeleteRows = $false
+$dgvNeedsVerification.ReadOnly = $true
+$dgvNeedsVerification.AutoSizeColumnsMode = "Fill"
+$dgvNeedsVerification.SelectionMode = "FullRowSelect"
+
+# Context menu for Needs Verification grid
+$contextMenuNeedsVerif = New-Object System.Windows.Forms.ContextMenuStrip
+$menuItemCopyNVSerial = New-Object System.Windows.Forms.ToolStripMenuItem
+$menuItemCopyNVSerial.Text = "Copy Serial Number"
+$menuItemCopyNVSerial.Add_Click({
+    if ($dgvNeedsVerification.SelectedRows.Count -gt 0) {
+        $val = $dgvNeedsVerification.SelectedRows[0].Cells["SerialNumber"].Value
+        if ($null -ne $val -and $val -ne "") { [System.Windows.Forms.Clipboard]::SetText($val) }
+    }
+})
+$contextMenuNeedsVerif.Items.Add($menuItemCopyNVSerial) | Out-Null
+$dgvNeedsVerification.ContextMenuStrip = $contextMenuNeedsVerif
+$tabNeedsVerification.Controls.Add($dgvNeedsVerification)
+
+$btnRefreshNeedsVerif = New-Object System.Windows.Forms.Button
+$btnRefreshNeedsVerif.Text = "Refresh"
+$btnRefreshNeedsVerif.Location = New-Object System.Drawing.Point(10, 545)
+$btnRefreshNeedsVerif.Size = New-Object System.Drawing.Size(80, 30)
+$tabNeedsVerification.Controls.Add($btnRefreshNeedsVerif)
+
+$btnEmailSelectedNeedsVerif = New-Object System.Windows.Forms.Button
+$btnEmailSelectedNeedsVerif.Text = "Email Selected"
+$btnEmailSelectedNeedsVerif.Location = New-Object System.Drawing.Point(100, 545)
+$btnEmailSelectedNeedsVerif.Size = New-Object System.Drawing.Size(120, 30)
+$tabNeedsVerification.Controls.Add($btnEmailSelectedNeedsVerif)
+
+$btnEmailAllNeedsVerif = New-Object System.Windows.Forms.Button
+$btnEmailAllNeedsVerif.Text = "Send Email to All"
+$btnEmailAllNeedsVerif.Location = New-Object System.Drawing.Point(230, 545)
+$btnEmailAllNeedsVerif.Size = New-Object System.Drawing.Size(140, 30)
+$btnEmailAllNeedsVerif.BackColor = [System.Drawing.Color]::FromArgb(220, 53, 69)
+$btnEmailAllNeedsVerif.ForeColor = [System.Drawing.Color]::White
+$btnEmailAllNeedsVerif.FlatStyle = "Flat"
+$tabNeedsVerification.Controls.Add($btnEmailAllNeedsVerif)
+
+$lblEmailAllStatus = New-Object System.Windows.Forms.Label
+$lblEmailAllStatus.Text = ""
+$lblEmailAllStatus.Location = New-Object System.Drawing.Point(385, 550)
+$lblEmailAllStatus.Size = New-Object System.Drawing.Size(750, 20)
+$lblEmailAllStatus.ForeColor = [System.Drawing.Color]::DarkGreen
+$tabNeedsVerification.Controls.Add($lblEmailAllStatus)
+
 # Add tabs to control
 $tabControl.TabPages.Add($tabImport)
 $tabControl.TabPages.Add($tabInventory)
 $tabControl.TabPages.Add($tabLookup)
 $tabControl.TabPages.Add($tabLoaner)
 $tabControl.TabPages.Add($tabMissing)
+$tabControl.TabPages.Add($tabAwaiting)
+$tabControl.TabPages.Add($tabNeedsVerification)
 $form.Controls.Add($tabControl)
 
 # Event Handlers
@@ -574,6 +720,11 @@ $btnLoadCsv.Add_Click({
             $currentMissing = Load-MissingLaptops
             $missingSerials = @{}
             foreach ($m in $currentMissing) { $missingSerials[$m.SerialNumber.Trim()] = $true }
+
+            # Pre-load awaiting verification serials for O(1) lookups
+            $script:awaitingVerification = Load-AwaitingVerification
+            $awaitingSerials = @{}
+            foreach ($a in $script:awaitingVerification) { $awaitingSerials[$a.SerialNumber.Trim()] = $true }
 
             # Batch-fetch ALL AD computers in one query and build a hashtable for O(1) lookup
             $adComputerSet = @{}
@@ -637,8 +788,9 @@ $btnLoadCsv.Add_Click({
                 # Missing list - O(1) hashtable lookup
                 $dr["Missing?"] = if ($missingSerials.ContainsKey($row.serial_number.Trim())) { "Yes" } else { "No" }
 
-                # Verified - default pending until Run Verification is clicked
-                $dr["Verified"] = "Pending"
+                # Verified - show Email Sent if already in awaiting list, else Pending
+                $verifiedVal = if ($awaitingSerials.ContainsKey($row.serial_number.Trim())) { "Email Sent" } else { "Pending" }
+                $dr["Verified"] = $verifiedVal
 
                 $dt.Rows.Add($dr)
             }
@@ -673,7 +825,15 @@ $btnLoadCsv.Add_Click({
                 }
 
                 # Verified
-                $row.Cells["Verified"].Style.ForeColor = [System.Drawing.Color]::Gray
+                switch ($row.Cells["Verified"].Value) {
+                    "Email Sent" {
+                        $row.Cells["Verified"].Style.ForeColor = [System.Drawing.Color]::DarkBlue
+                        $row.Cells["Verified"].Style.Font = New-Object System.Drawing.Font($dgvCsv.Font, [System.Drawing.FontStyle]::Bold)
+                    }
+                    default {
+                        $row.Cells["Verified"].Style.ForeColor = [System.Drawing.Color]::Gray
+                    }
+                }
             }
 
             $dgvCsv.ResumeLayout()
@@ -814,13 +974,26 @@ $btnRunVerification.Add_Click({
                 $cell.Style.Font = New-Object System.Drawing.Font($dgvCsv.Font, [System.Drawing.FontStyle]::Regular)
             }
         }
+
+        # If now verified, auto-remove from awaiting verification list
+        if ($status -like "Verified*") {
+            $before = $script:awaitingVerification.Count
+            $script:awaitingVerification = @($script:awaitingVerification | Where-Object { $_.SerialNumber.Trim() -ne $serial })
+            if ($script:awaitingVerification.Count -lt $before) {
+                Save-AwaitingVerification
+            }
+        }
     }
+
+    # Refresh awaiting grid and needs-verification grid after run
+    Update-AwaitingVerificationList
+    Update-NeedsVerificationList
 
     $dgvCsv.ResumeLayout()
     $form.Cursor = [System.Windows.Forms.Cursors]::Default
 
     [System.Windows.Forms.MessageBox]::Show(
-        "Verification complete!`n`nVerified: $verifiedCount`nNeeds Verification: $needsCount`nMissing: $($missingSerials.Count)`n`nVerified = Active in AD (logged in within 7 days) or in local stock.`nNeeds Verification = Not recently active in AD.",
+        "Verification complete!`n`nVerified: $verifiedCount`nNeeds Verification: $needsCount`nMissing: $($missingSerials.Count)`n`nVerified = Active in AD (logged in within 7 days) or in local stock.`nNeeds Verification = Not recently active in AD.`n`nSee the 'Needs Verification' tab for the full list.",
         "Verification Results", "OK", "Information")
 })
 
@@ -1397,7 +1570,35 @@ $btnEmailCsvUser.Add_Click({
 
     try {
         Send-Email -SendTo $userEmail -AssetTag $assetTag -SerialNumber $selectedSerial -Model $model -EmailAdd $fromEmail -Cc $ccList
-        [System.Windows.Forms.MessageBox]::Show("Email sent successfully to $userEmail.", "Email Sent", "OK", "Information")
+
+        # Add to Awaiting Verification list (replace any existing entry for same serial)
+        $script:awaitingVerification = @($script:awaitingVerification | Where-Object { $_.SerialNumber.Trim() -ne $selectedSerial.Trim() })
+        $script:awaitingVerification += [PSCustomObject]@{
+            SerialNumber  = $selectedSerial
+            Model         = $model
+            AssetTag      = $assetTag
+            AssignedTo    = $assignedTo
+            EmailSentDate = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
+            EmailSentBy   = $fromEmail
+            Source        = "CSV"
+        }
+        Save-AwaitingVerification
+        Update-AwaitingVerificationList
+
+        # Update the Verified cell in the CSV grid to reflect email sent
+        $dt = $dgvCsv.DataSource
+        if ($dt) {
+            for ($i = 0; $i -lt $script:csvData.Count; $i++) {
+                if ($script:csvData[$i].serial_number.Trim() -eq $selectedSerial.Trim()) {
+                    $dt.Rows[$i]["Verified"] = "Email Sent"
+                    $dgvCsv.Rows[$i].Cells["Verified"].Style.ForeColor = [System.Drawing.Color]::DarkBlue
+                    $dgvCsv.Rows[$i].Cells["Verified"].Style.Font = New-Object System.Drawing.Font($dgvCsv.Font, [System.Drawing.FontStyle]::Bold)
+                    break
+                }
+            }
+        }
+
+        [System.Windows.Forms.MessageBox]::Show("Email sent successfully to $userEmail.`n`nThis laptop has been added to the 'Awaiting Verification' list.", "Email Sent", "OK", "Information")
     }
     catch {
         [System.Windows.Forms.MessageBox]::Show("Failed to send email: $($_.Exception.Message)", "Email Error", "OK", "Error")
@@ -2420,7 +2621,22 @@ $btnEmailMissingUser.Add_Click({
 
     try {
         Send-Email -SendTo $userEmail -AssetTag $assetTag -SerialNumber $selectedSerial -Model $model -EmailAdd $fromEmail -Cc $ccList
-        [System.Windows.Forms.MessageBox]::Show("Email sent successfully to $userEmail.", "Email Sent", "OK", "Information")
+
+        # Add to Awaiting Verification list (replace any existing entry for same serial)
+        $script:awaitingVerification = @($script:awaitingVerification | Where-Object { $_.SerialNumber.Trim() -ne $selectedSerial.Trim() })
+        $script:awaitingVerification += [PSCustomObject]@{
+            SerialNumber  = $selectedSerial
+            Model         = $model
+            AssetTag      = $assetTag
+            AssignedTo    = $assignedTo
+            EmailSentDate = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
+            EmailSentBy   = $fromEmail
+            Source        = "Missing"
+        }
+        Save-AwaitingVerification
+        Update-AwaitingVerificationList
+
+        [System.Windows.Forms.MessageBox]::Show("Email sent successfully to $userEmail.`n`nThis laptop has been added to the 'Awaiting Verification' list.", "Email Sent", "OK", "Information")
     }
     catch {
         [System.Windows.Forms.MessageBox]::Show("Failed to send email: $($_.Exception.Message)", "Email Error", "OK", "Error")
@@ -2627,10 +2843,508 @@ function Update-MissingLaptopsList {
     }
 }
 
+function Update-AwaitingVerificationList {
+    $script:awaitingVerification = Load-AwaitingVerification
+
+    $dt = New-Object System.Data.DataTable
+    $dt.Columns.Add("SerialNumber")  | Out-Null
+    $dt.Columns.Add("Model")         | Out-Null
+    $dt.Columns.Add("AssetTag")      | Out-Null
+    $dt.Columns.Add("AssignedTo")    | Out-Null
+    $dt.Columns.Add("EmailSentDate") | Out-Null
+    $dt.Columns.Add("EmailSentBy")   | Out-Null
+    $dt.Columns.Add("Source")        | Out-Null
+
+    foreach ($item in $script:awaitingVerification) {
+        $dr = $dt.NewRow()
+        $dr["SerialNumber"]  = $item.SerialNumber
+        $dr["Model"]         = if ($item.Model)         { $item.Model }         else { "" }
+        $dr["AssetTag"]      = if ($item.AssetTag)      { $item.AssetTag }      else { "N/A" }
+        $dr["AssignedTo"]    = if ($item.AssignedTo)    { $item.AssignedTo }    else { "" }
+        $dr["EmailSentDate"] = if ($item.EmailSentDate) { $item.EmailSentDate } else { "" }
+        $dr["EmailSentBy"]   = if ($item.EmailSentBy)   { $item.EmailSentBy }   else { "" }
+        $dr["Source"]        = if ($item.Source)        { $item.Source }        else { "" }
+        $dt.Rows.Add($dr)
+    }
+
+    $dgvAwaiting.DataSource = $dt
+
+    foreach ($row in $dgvAwaiting.Rows) {
+        $row.DefaultCellStyle.BackColor = [System.Drawing.Color]::LightYellow
+        $row.DefaultCellStyle.ForeColor = [System.Drawing.Color]::DarkBlue
+    }
+}
+
+# Awaiting Verification - Remove Selected (Mark Verified)
+$btnRemoveAwaiting.Add_Click({
+    if ($dgvAwaiting.SelectedRows.Count -eq 0) {
+        [System.Windows.Forms.MessageBox]::Show("Please select a laptop to mark as verified.", "No Selection", "OK", "Warning")
+        return
+    }
+
+    $selectedSerial = $dgvAwaiting.SelectedRows[0].Cells["SerialNumber"].Value
+    $confirm = [System.Windows.Forms.MessageBox]::Show(
+        "Mark '$selectedSerial' as verified and remove from this list?",
+        "Confirm", "YesNo", "Question")
+
+    if ($confirm -eq "Yes") {
+        $script:awaitingVerification = @($script:awaitingVerification | Where-Object { $_.SerialNumber.Trim() -ne $selectedSerial.Trim() })
+        Save-AwaitingVerification
+        Update-AwaitingVerificationList
+    }
+})
+
+# Awaiting Verification - Refresh
+$btnRefreshAwaiting.Add_Click({
+    Update-AwaitingVerificationList
+})
+
+# Awaiting Verification - Re-send Email
+$btnEmailAwaitingUser.Add_Click({
+    if ($dgvAwaiting.SelectedRows.Count -eq 0) {
+        [System.Windows.Forms.MessageBox]::Show("Please select a laptop to re-send the email.", "No Selection", "OK", "Warning")
+        return
+    }
+
+    $selectedSerial  = $dgvAwaiting.SelectedRows[0].Cells["SerialNumber"].Value
+    $script:awaitingVerification = Load-AwaitingVerification
+    $awaitingItem = $script:awaitingVerification | Where-Object { $_.SerialNumber -eq $selectedSerial }
+
+    if (-not $awaitingItem) {
+        [System.Windows.Forms.MessageBox]::Show("Unable to find this entry.", "Not Found", "OK", "Error")
+        return
+    }
+
+    $assignedTo = $awaitingItem.AssignedTo
+    $model      = if ($awaitingItem.Model)    { $awaitingItem.Model }    else { "Unknown Model" }
+    $assetTag   = if ($awaitingItem.AssetTag) { $awaitingItem.AssetTag } else { "N/A" }
+
+    if ([string]::IsNullOrWhiteSpace($assignedTo)) {
+        [System.Windows.Forms.MessageBox]::Show("No assigned user recorded for this laptop.", "No User", "OK", "Warning")
+        return
+    }
+
+    $userEmail    = ""
+    $managerEmail = ""
+    $form.Cursor  = [System.Windows.Forms.Cursors]::WaitCursor
+
+    $adUser   = $null
+    $safeName = $assignedTo -replace "'", "''"
+
+    try {
+        $r = @(Get-ADUser -Filter "DisplayName -eq '$safeName'" -Properties EmailAddress, Manager -ErrorAction Stop)
+        if ($r.Count -gt 0) { $adUser = $r[0] }
+    } catch { }
+    if (-not $adUser) {
+        try {
+            $r = @(Get-ADUser -Filter "Name -eq '$safeName'" -Properties EmailAddress, Manager -ErrorAction Stop)
+            if ($r.Count -gt 0) { $adUser = $r[0] }
+        } catch { }
+    }
+    if (-not $adUser -and $assignedTo -match ' ') {
+        try {
+            $nameParts = $assignedTo -split '\s+', 2
+            $fn = $nameParts[0].Trim() -replace "'", "''"
+            $ln = $nameParts[1].Trim() -replace "'", "''"
+            $r = @(Get-ADUser -Filter "GivenName -eq '$fn' -and Surname -eq '$ln'" -Properties EmailAddress, Manager -ErrorAction Stop)
+            if ($r.Count -gt 0) { $adUser = $r[0] }
+        } catch { }
+    }
+
+    $form.Cursor = [System.Windows.Forms.Cursors]::Default
+
+    if (-not $adUser) {
+        [System.Windows.Forms.MessageBox]::Show("Could not find '$assignedTo' in Active Directory.", "AD Lookup Error", "OK", "Error")
+        return
+    }
+
+    $userEmail = if ($adUser.EmailAddress) { $adUser.EmailAddress } else { "" }
+    if ($adUser.Manager) {
+        try {
+            $mgr = Get-ADUser -Identity $adUser.Manager -Properties EmailAddress -ErrorAction Stop
+            $managerEmail = if ($mgr.EmailAddress) { $mgr.EmailAddress } else { "" }
+        } catch { }
+    }
+
+    if ([string]::IsNullOrWhiteSpace($userEmail)) {
+        [System.Windows.Forms.MessageBox]::Show("User '$assignedTo' has no email address in Active Directory.", "No Email", "OK", "Warning")
+        return
+    }
+
+    $emailDialog = New-Object System.Windows.Forms.Form
+    $emailDialog.Text = "Re-send Laptop Verification Email"
+    $emailDialog.Size = New-Object System.Drawing.Size(500, 220)
+    $emailDialog.StartPosition = "CenterParent"
+    $emailDialog.FormBorderStyle = "FixedDialog"
+    $emailDialog.MaximizeBox = $false
+    $emailDialog.MinimizeBox = $false
+
+    $lFrom = New-Object System.Windows.Forms.Label; $lFrom.Text = "From (your email):"; $lFrom.Location = New-Object System.Drawing.Point(20,20); $lFrom.Size = New-Object System.Drawing.Size(120,20); $emailDialog.Controls.Add($lFrom)
+    $tFrom = New-Object System.Windows.Forms.TextBox; $tFrom.Location = New-Object System.Drawing.Point(150,18); $tFrom.Size = New-Object System.Drawing.Size(320,20); $tFrom.Text = $awaitingItem.EmailSentBy; $emailDialog.Controls.Add($tFrom)
+    $lTo = New-Object System.Windows.Forms.Label; $lTo.Text = "To (user):"; $lTo.Location = New-Object System.Drawing.Point(20,55); $lTo.Size = New-Object System.Drawing.Size(120,20); $emailDialog.Controls.Add($lTo)
+    $tTo = New-Object System.Windows.Forms.TextBox; $tTo.Location = New-Object System.Drawing.Point(150,53); $tTo.Size = New-Object System.Drawing.Size(320,20); $tTo.ReadOnly = $true; $tTo.Text = $userEmail; $emailDialog.Controls.Add($tTo)
+    $lCc = New-Object System.Windows.Forms.Label; $lCc.Text = "CC (manager + you):"; $lCc.Location = New-Object System.Drawing.Point(20,90); $lCc.Size = New-Object System.Drawing.Size(120,20); $emailDialog.Controls.Add($lCc)
+    $tCc = New-Object System.Windows.Forms.TextBox; $tCc.Location = New-Object System.Drawing.Point(150,88); $tCc.Size = New-Object System.Drawing.Size(320,20); $tCc.ReadOnly = $true; $tCc.Text = if ($managerEmail) { "$managerEmail + you" } else { "you" }; $emailDialog.Controls.Add($tCc)
+
+    $bSend = New-Object System.Windows.Forms.Button; $bSend.Text = "Send"; $bSend.Location = New-Object System.Drawing.Point(260,135); $bSend.Size = New-Object System.Drawing.Size(80,30); $bSend.DialogResult = "OK"; $emailDialog.Controls.Add($bSend)
+    $bCancel = New-Object System.Windows.Forms.Button; $bCancel.Text = "Cancel"; $bCancel.Location = New-Object System.Drawing.Point(350,135); $bCancel.Size = New-Object System.Drawing.Size(80,30); $bCancel.DialogResult = "Cancel"; $emailDialog.Controls.Add($bCancel)
+    $emailDialog.AcceptButton = $bSend; $emailDialog.CancelButton = $bCancel
+
+    if ($emailDialog.ShowDialog() -ne "OK") { return }
+
+    $fromEmail = $tFrom.Text.Trim()
+    if ([string]::IsNullOrWhiteSpace($fromEmail) -or (-not $fromEmail.Contains("@"))) {
+        [System.Windows.Forms.MessageBox]::Show("Please enter a valid sender email address.", "Invalid Email", "OK", "Warning")
+        return
+    }
+
+    $ccList = @()
+    if (-not [string]::IsNullOrWhiteSpace($managerEmail)) { $ccList += $managerEmail }
+    $ccList += $fromEmail
+
+    try {
+        Send-Email -SendTo $userEmail -AssetTag $assetTag -SerialNumber $selectedSerial -Model $model -EmailAdd $fromEmail -Cc $ccList
+
+        # Update the email sent date and sender in the awaiting list
+        $script:awaitingVerification = @($script:awaitingVerification | Where-Object { $_.SerialNumber.Trim() -ne $selectedSerial.Trim() })
+        $script:awaitingVerification += [PSCustomObject]@{
+            SerialNumber  = $selectedSerial
+            Model         = $model
+            AssetTag      = $assetTag
+            AssignedTo    = $assignedTo
+            EmailSentDate = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
+            EmailSentBy   = $fromEmail
+            Source        = if ($awaitingItem.Source) { $awaitingItem.Source } else { "Awaiting" }
+        }
+        Save-AwaitingVerification
+        Update-AwaitingVerificationList
+
+        [System.Windows.Forms.MessageBox]::Show("Email re-sent successfully to $userEmail.", "Email Sent", "OK", "Information")
+    }
+    catch {
+        [System.Windows.Forms.MessageBox]::Show("Failed to send email: $($_.Exception.Message)", "Email Error", "OK", "Error")
+    }
+})
+
+function Update-NeedsVerificationList {
+    $dt = New-Object System.Data.DataTable
+    $dt.Columns.Add("SerialNumber") | Out-Null
+    $dt.Columns.Add("Model")        | Out-Null
+    $dt.Columns.Add("AssetTag")     | Out-Null
+    $dt.Columns.Add("AssignedTo")   | Out-Null
+    $dt.Columns.Add("InAD")         | Out-Null
+    $dt.Columns.Add("UserInAD")     | Out-Null
+    $dt.Columns.Add("VerifiedStatus")| Out-Null
+
+    if ($script:csvData -and $script:csvData.Count -gt 0) {
+        $csvDt = $dgvCsv.DataSource
+        for ($i = 0; $i -lt $script:csvData.Count; $i++) {
+            $row = $script:csvData[$i]
+            $verifiedVal = if ($csvDt) { $csvDt.Rows[$i]["Verified"] } else { "Pending" }
+
+            if ($verifiedVal -eq "Needs Verification" -or $verifiedVal -eq "Missing") {
+                $dr = $dt.NewRow()
+                $dr["SerialNumber"]    = $row.serial_number
+                $dr["Model"]          = if ($row.PSObject.Properties['model_category'] -and $row.model_category) { $row.model_category } elseif ($row.PSObject.Properties['model'] -and $row.model) { $row.model } else { "" }
+                $dr["AssetTag"]       = if ($row.PSObject.Properties['asset_tag'] -and $row.asset_tag) { $row.asset_tag } else { "N/A" }
+                $dr["AssignedTo"]     = if ($row.PSObject.Properties['assigned_to'] -and $row.assigned_to) { $row.assigned_to } else { "" }
+                $dr["InAD"]           = if ($csvDt) { $csvDt.Rows[$i]["In AD"] } else { "" }
+                $dr["UserInAD"]       = if ($csvDt) { $csvDt.Rows[$i]["User in AD?"] } else { "" }
+                $dr["VerifiedStatus"] = $verifiedVal
+                $dt.Rows.Add($dr)
+            }
+        }
+    }
+
+    $dgvNeedsVerification.DataSource = $dt
+
+    foreach ($row in $dgvNeedsVerification.Rows) {
+        $statusVal = $row.Cells["VerifiedStatus"].Value
+        if ($statusVal -eq "Missing") {
+            $row.DefaultCellStyle.BackColor = [System.Drawing.Color]::MistyRose
+            $row.DefaultCellStyle.ForeColor = [System.Drawing.Color]::DarkRed
+        } else {
+            $row.DefaultCellStyle.BackColor = [System.Drawing.Color]::LightYellow
+            $row.DefaultCellStyle.ForeColor = [System.Drawing.Color]::DarkOrange
+        }
+    }
+}
+
+# Shared helper: look up AD user by display name and return adUser object or $null
+function Find-ADUserByName {
+    param([string]$Name)
+    $safeName = $Name -replace "'", "''"
+    $adUser = $null
+
+    try {
+        $r = @(Get-ADUser -Filter "DisplayName -eq '$safeName'" -Properties EmailAddress, Manager -ErrorAction Stop)
+        if ($r.Count -gt 0) { $adUser = $r[0] }
+    } catch { }
+    if (-not $adUser) {
+        try {
+            $r = @(Get-ADUser -Filter "Name -eq '$safeName'" -Properties EmailAddress, Manager -ErrorAction Stop)
+            if ($r.Count -gt 0) { $adUser = $r[0] }
+        } catch { }
+    }
+    if (-not $adUser -and $Name -match ' ') {
+        try {
+            $parts = $Name -split '\s+', 2
+            $fn = $parts[0].Trim() -replace "'", "''"
+            $ln = $parts[1].Trim() -replace "'", "''"
+            $r = @(Get-ADUser -Filter "GivenName -eq '$fn' -and Surname -eq '$ln'" -Properties EmailAddress, Manager -ErrorAction Stop)
+            if ($r.Count -gt 0) { $adUser = $r[0] }
+        } catch { }
+    }
+    return $adUser
+}
+
+# Needs Verification - Refresh
+$btnRefreshNeedsVerif.Add_Click({
+    Update-NeedsVerificationList
+})
+
+# Needs Verification - Email Selected
+$btnEmailSelectedNeedsVerif.Add_Click({
+    if ($dgvNeedsVerification.SelectedRows.Count -eq 0) {
+        [System.Windows.Forms.MessageBox]::Show("Please select a device to email.", "No Selection", "OK", "Warning")
+        return
+    }
+
+    $selRow     = $dgvNeedsVerification.SelectedRows[0]
+    $serial     = $selRow.Cells["SerialNumber"].Value
+    $assignedTo = $selRow.Cells["AssignedTo"].Value
+    $model      = $selRow.Cells["Model"].Value
+    $assetTag   = $selRow.Cells["AssetTag"].Value
+
+    if ([string]::IsNullOrWhiteSpace($assignedTo)) {
+        [System.Windows.Forms.MessageBox]::Show("No assigned user for this device.", "No User", "OK", "Warning")
+        return
+    }
+
+    $form.Cursor = [System.Windows.Forms.Cursors]::WaitCursor
+    $adUser = Find-ADUserByName -Name $assignedTo
+    $form.Cursor = [System.Windows.Forms.Cursors]::Default
+
+    if (-not $adUser) {
+        [System.Windows.Forms.MessageBox]::Show("Could not find '$assignedTo' in Active Directory.", "AD Lookup Error", "OK", "Error")
+        return
+    }
+
+    $userEmail = if ($adUser.EmailAddress) { $adUser.EmailAddress } else { "" }
+    $managerEmail = ""
+    if ($adUser.Manager) {
+        try {
+            $mgr = Get-ADUser -Identity $adUser.Manager -Properties EmailAddress -ErrorAction Stop
+            $managerEmail = if ($mgr.EmailAddress) { $mgr.EmailAddress } else { "" }
+        } catch { }
+    }
+
+    if ([string]::IsNullOrWhiteSpace($userEmail)) {
+        [System.Windows.Forms.MessageBox]::Show("'$assignedTo' has no email address in AD.", "No Email", "OK", "Warning")
+        return
+    }
+
+    $dlg = New-Object System.Windows.Forms.Form
+    $dlg.Text = "Send Verification Email"
+    $dlg.Size = New-Object System.Drawing.Size(500, 220)
+    $dlg.StartPosition = "CenterParent"
+    $dlg.FormBorderStyle = "FixedDialog"
+    $dlg.MaximizeBox = $false; $dlg.MinimizeBox = $false
+
+    $lF = New-Object System.Windows.Forms.Label; $lF.Text = "From (your email):"; $lF.Location = New-Object System.Drawing.Point(20,20); $lF.Size = New-Object System.Drawing.Size(120,20); $dlg.Controls.Add($lF)
+    $tF = New-Object System.Windows.Forms.TextBox; $tF.Location = New-Object System.Drawing.Point(150,18); $tF.Size = New-Object System.Drawing.Size(320,20); $dlg.Controls.Add($tF)
+    $lT = New-Object System.Windows.Forms.Label; $lT.Text = "To (user):"; $lT.Location = New-Object System.Drawing.Point(20,55); $lT.Size = New-Object System.Drawing.Size(120,20); $dlg.Controls.Add($lT)
+    $tT = New-Object System.Windows.Forms.TextBox; $tT.Location = New-Object System.Drawing.Point(150,53); $tT.Size = New-Object System.Drawing.Size(320,20); $tT.ReadOnly = $true; $tT.Text = $userEmail; $dlg.Controls.Add($tT)
+    $lC = New-Object System.Windows.Forms.Label; $lC.Text = "CC (manager + you):"; $lC.Location = New-Object System.Drawing.Point(20,90); $lC.Size = New-Object System.Drawing.Size(120,20); $dlg.Controls.Add($lC)
+    $tC = New-Object System.Windows.Forms.TextBox; $tC.Location = New-Object System.Drawing.Point(150,88); $tC.Size = New-Object System.Drawing.Size(320,20); $tC.ReadOnly = $true; $tC.Text = if ($managerEmail) { "$managerEmail + you" } else { "you" }; $dlg.Controls.Add($tC)
+    $bS = New-Object System.Windows.Forms.Button; $bS.Text = "Send"; $bS.Location = New-Object System.Drawing.Point(260,135); $bS.Size = New-Object System.Drawing.Size(80,30); $bS.DialogResult = "OK"; $dlg.Controls.Add($bS)
+    $bX = New-Object System.Windows.Forms.Button; $bX.Text = "Cancel"; $bX.Location = New-Object System.Drawing.Point(350,135); $bX.Size = New-Object System.Drawing.Size(80,30); $bX.DialogResult = "Cancel"; $dlg.Controls.Add($bX)
+    $dlg.AcceptButton = $bS; $dlg.CancelButton = $bX
+
+    if ($dlg.ShowDialog() -ne "OK") { return }
+
+    $fromEmail = $tF.Text.Trim()
+    if ([string]::IsNullOrWhiteSpace($fromEmail) -or (-not $fromEmail.Contains("@"))) {
+        [System.Windows.Forms.MessageBox]::Show("Please enter a valid sender email.", "Invalid Email", "OK", "Warning")
+        return
+    }
+
+    $ccList = @()
+    if (-not [string]::IsNullOrWhiteSpace($managerEmail)) { $ccList += $managerEmail }
+    $ccList += $fromEmail
+
+    try {
+        Send-Email -SendTo $userEmail -AssetTag $assetTag -SerialNumber $serial -Model $model -EmailAdd $fromEmail -Cc $ccList
+
+        $script:awaitingVerification = @($script:awaitingVerification | Where-Object { $_.SerialNumber.Trim() -ne $serial.Trim() })
+        $script:awaitingVerification += [PSCustomObject]@{
+            SerialNumber  = $serial
+            Model         = $model
+            AssetTag      = $assetTag
+            AssignedTo    = $assignedTo
+            EmailSentDate = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
+            EmailSentBy   = $fromEmail
+            Source        = "Needs Verification"
+        }
+        Save-AwaitingVerification
+        Update-AwaitingVerificationList
+
+        # Update Verified cell in CSV grid
+        $csvDt = $dgvCsv.DataSource
+        if ($csvDt) {
+            for ($i = 0; $i -lt $script:csvData.Count; $i++) {
+                if ($script:csvData[$i].serial_number.Trim() -eq $serial.Trim()) {
+                    $csvDt.Rows[$i]["Verified"] = "Email Sent"
+                    $dgvCsv.Rows[$i].Cells["Verified"].Style.ForeColor = [System.Drawing.Color]::DarkBlue
+                    $dgvCsv.Rows[$i].Cells["Verified"].Style.Font = New-Object System.Drawing.Font($dgvCsv.Font, [System.Drawing.FontStyle]::Bold)
+                    break
+                }
+            }
+        }
+
+        Update-NeedsVerificationList
+        [System.Windows.Forms.MessageBox]::Show("Email sent to $userEmail and added to Awaiting Verification.", "Email Sent", "OK", "Information")
+    }
+    catch {
+        [System.Windows.Forms.MessageBox]::Show("Failed to send email: $($_.Exception.Message)", "Email Error", "OK", "Error")
+    }
+})
+
+# Needs Verification - Send Email to All
+$btnEmailAllNeedsVerif.Add_Click({
+    $dt = $dgvNeedsVerification.DataSource
+    if (-not $dt -or $dt.Rows.Count -eq 0) {
+        [System.Windows.Forms.MessageBox]::Show("The Needs Verification list is empty. Run 'Run Verification' on the CSV tab first.", "Nothing to Send", "OK", "Warning")
+        return
+    }
+
+    $totalRows = $dt.Rows.Count
+    $confirm = [System.Windows.Forms.MessageBox]::Show(
+        "This will send a verification email to the assigned user of all $totalRows device(s) in this list.`n`nDevices with no assigned user or no AD match will be skipped.`n`nDo you want to continue?",
+        "Send Email to All - Confirm", "YesNo", "Warning")
+    if ($confirm -ne "Yes") { return }
+
+    # Ask for sender email once for the whole batch
+    $fromDlg = New-Object System.Windows.Forms.Form
+    $fromDlg.Text = "Sender Email"
+    $fromDlg.Size = New-Object System.Drawing.Size(420, 130)
+    $fromDlg.StartPosition = "CenterParent"
+    $fromDlg.FormBorderStyle = "FixedDialog"
+    $fromDlg.MaximizeBox = $false; $fromDlg.MinimizeBox = $false
+
+    $lbl = New-Object System.Windows.Forms.Label; $lbl.Text = "Your email address (From):"; $lbl.Location = New-Object System.Drawing.Point(15,18); $lbl.Size = New-Object System.Drawing.Size(170,20); $fromDlg.Controls.Add($lbl)
+    $txtSender = New-Object System.Windows.Forms.TextBox; $txtSender.Location = New-Object System.Drawing.Point(190,16); $txtSender.Size = New-Object System.Drawing.Size(200,20); $fromDlg.Controls.Add($txtSender)
+    $bOk = New-Object System.Windows.Forms.Button; $bOk.Text = "Continue"; $bOk.Location = New-Object System.Drawing.Point(190,55); $bOk.Size = New-Object System.Drawing.Size(90,28); $bOk.DialogResult = "OK"; $fromDlg.Controls.Add($bOk)
+    $bCx = New-Object System.Windows.Forms.Button; $bCx.Text = "Cancel"; $bCx.Location = New-Object System.Drawing.Point(290,55); $bCx.Size = New-Object System.Drawing.Size(80,28); $bCx.DialogResult = "Cancel"; $fromDlg.Controls.Add($bCx)
+    $fromDlg.AcceptButton = $bOk; $fromDlg.CancelButton = $bCx
+
+    if ($fromDlg.ShowDialog() -ne "OK") { return }
+
+    $fromEmail = $txtSender.Text.Trim()
+    if ([string]::IsNullOrWhiteSpace($fromEmail) -or (-not $fromEmail.Contains("@"))) {
+        [System.Windows.Forms.MessageBox]::Show("Please enter a valid sender email address.", "Invalid Email", "OK", "Warning")
+        return
+    }
+
+    $form.Cursor = [System.Windows.Forms.Cursors]::WaitCursor
+    $lblEmailAllStatus.Text = "Sending emails..."
+    $form.Refresh()
+
+    $sentCount    = 0
+    $skippedCount = 0
+    $errorCount   = 0
+    $adUserCache  = @{}
+
+    $csvDt = $dgvCsv.DataSource
+
+    foreach ($row in $dt.Rows) {
+        $serial     = $row["SerialNumber"]
+        $assignedTo = $row["AssignedTo"]
+        $model      = $row["Model"]
+        $assetTag   = $row["AssetTag"]
+
+        if ([string]::IsNullOrWhiteSpace($assignedTo)) {
+            $skippedCount++
+            continue
+        }
+
+        # AD lookup with cache
+        if (-not $adUserCache.ContainsKey($assignedTo)) {
+            $adUserCache[$assignedTo] = Find-ADUserByName -Name $assignedTo
+        }
+        $adUser = $adUserCache[$assignedTo]
+
+        if (-not $adUser -or [string]::IsNullOrWhiteSpace($adUser.EmailAddress)) {
+            $skippedCount++
+            continue
+        }
+
+        $userEmail    = $adUser.EmailAddress
+        $managerEmail = ""
+        if ($adUser.Manager) {
+            try {
+                $mgr = Get-ADUser -Identity $adUser.Manager -Properties EmailAddress -ErrorAction Stop
+                $managerEmail = if ($mgr.EmailAddress) { $mgr.EmailAddress } else { "" }
+            } catch { }
+        }
+
+        $ccList = @()
+        if (-not [string]::IsNullOrWhiteSpace($managerEmail)) { $ccList += $managerEmail }
+        $ccList += $fromEmail
+
+        try {
+            Send-Email -SendTo $userEmail -AssetTag $assetTag -SerialNumber $serial -Model $model -EmailAdd $fromEmail -Cc $ccList
+
+            # Add / update awaiting verification
+            $script:awaitingVerification = @($script:awaitingVerification | Where-Object { $_.SerialNumber.Trim() -ne $serial.Trim() })
+            $script:awaitingVerification += [PSCustomObject]@{
+                SerialNumber  = $serial
+                Model         = $model
+                AssetTag      = $assetTag
+                AssignedTo    = $assignedTo
+                EmailSentDate = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
+                EmailSentBy   = $fromEmail
+                Source        = "Needs Verification"
+            }
+
+            # Update Verified cell in CSV grid
+            if ($csvDt) {
+                for ($i = 0; $i -lt $script:csvData.Count; $i++) {
+                    if ($script:csvData[$i].serial_number.Trim() -eq $serial.Trim()) {
+                        $csvDt.Rows[$i]["Verified"] = "Email Sent"
+                        $dgvCsv.Rows[$i].Cells["Verified"].Style.ForeColor = [System.Drawing.Color]::DarkBlue
+                        $dgvCsv.Rows[$i].Cells["Verified"].Style.Font = New-Object System.Drawing.Font($dgvCsv.Font, [System.Drawing.FontStyle]::Bold)
+                        break
+                    }
+                }
+            }
+
+            $sentCount++
+            $lblEmailAllStatus.Text = "Sending... $sentCount sent so far"
+            $form.Refresh()
+        }
+        catch {
+            $errorCount++
+        }
+    }
+
+    Save-AwaitingVerification
+    Update-AwaitingVerificationList
+    Update-NeedsVerificationList
+
+    $form.Cursor = [System.Windows.Forms.Cursors]::Default
+    $lblEmailAllStatus.Text = "Done: $sentCount sent, $skippedCount skipped (no user/AD match), $errorCount errors."
+
+    [System.Windows.Forms.MessageBox]::Show(
+        "Batch email complete!`n`nSent:    $sentCount`nSkipped: $skippedCount (no assigned user or not found in AD)`nErrors:  $errorCount`n`nAll sent devices have been added to 'Awaiting Verification'.",
+        "Batch Send Complete", "OK", "Information")
+})
+
 # Initialize inventory display
 Update-InventoryGrid
 Update-LoanerList
 Update-MissingLaptopsList
+Update-AwaitingVerificationList
 
 # Show form
 $form.Add_Shown({$form.Activate()})

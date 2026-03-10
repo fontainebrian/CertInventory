@@ -1,0 +1,335 @@
+[
+    {
+        "SerialNumber":  "PF58M04G",
+        "Model":  "Lenovo ThinkPad P14s Gen 5 AMD",
+        "AssetTag":  "N/A",
+        "AssignedTo":  "Angela Hoschouer",
+        "EmailSentDate":  "2026-03-10 14:02:28",
+        "EmailSentBy":  "brian.fontaine@rsmus.com",
+        "Source":  "Needs Verification"
+    },
+    {
+        "SerialNumber":  "0F36CWG25093PJ",
+        "Model":  "Microsoft Surface Laptop 7",
+        "AssetTag":  "N/A",
+        "AssignedTo":  "Chris Watson",
+        "EmailSentDate":  "2026-03-10 14:02:55",
+        "EmailSentBy":  "brian.fontaine@rsmus.com",
+        "Source":  "Needs Verification"
+    },
+    {
+        "SerialNumber":  "FXCFY00WGC",
+        "Model":  "Apple MacBook Pro (14-inch, 2024) M4 Pro",
+        "AssetTag":  "N/A",
+        "AssignedTo":  "Nigel Dube",
+        "EmailSentDate":  "2026-03-10 14:03:12",
+        "EmailSentBy":  "brian.fontaine@rsmus.com",
+        "Source":  "Needs Verification"
+    },
+    {
+        "SerialNumber":  "0F33K3D25123PJ",
+        "Model":  "Microsoft Surface Laptop 7",
+        "AssetTag":  "N/A",
+        "AssignedTo":  "Seigo Tomozawa",
+        "EmailSentDate":  "2026-03-10 14:03:19",
+        "EmailSentBy":  "brian.fontaine@rsmus.com",
+        "Source":  "Needs Verification"
+    },
+    {
+        "SerialNumber":  "0F37RBX24103MR",
+        "Model":  "Microsoft Surface Laptop 6 for Business",
+        "AssetTag":  "N/A",
+        "AssignedTo":  "Aryan Nagula",
+        "EmailSentDate":  "2026-03-10 14:03:26",
+        "EmailSentBy":  "brian.fontaine@rsmus.com",
+        "Source":  "Needs Verification"
+    },
+    {
+        "SerialNumber":  "0F33K4J25123PJ",
+        "Model":  "Microsoft Surface Laptop 7",
+        "AssetTag":  "N/A",
+        "AssignedTo":  "Courtney Dudley",
+        "EmailSentDate":  "2026-03-10 14:03:33",
+        "EmailSentBy":  "brian.fontaine@rsmus.com",
+        "Source":  "Needs Verification"
+    },
+    {
+        "SerialNumber":  "RWH9M233CM",
+        "Model":  "Apple MacBook Pro (14-inch, 2021)",
+        "AssetTag":  "N/A",
+        "AssignedTo":  "Davis Waldenmaier",
+        "EmailSentDate":  "2026-03-10 14:03:42",
+        "EmailSentBy":  "brian.fontaine@rsmus.com",
+        "Source":  "Needs Verification"
+    },
+    {
+        "SerialNumber":  "0F33JQ325123PJ",
+        "Model":  "Microsoft Surface Laptop 7",
+        "AssetTag":  "N/A",
+        "AssignedTo":  "Kade Engle",
+        "EmailSentDate":  "2026-03-10 14:03:48",
+        "EmailSentBy":  "brian.fontaine@rsmus.com",
+        "Source":  "Needs Verification"
+    },
+    {
+        "SerialNumber":  "MQCQ0R2JFW",
+        "Model":  "Apple MacBook Pro (14-inch, 2024) M4 Pro",
+        "AssetTag":  "N/A",
+        "AssignedTo":  "Henry Fundenberger",
+        "EmailSentDate":  "2026-03-10 14:03:53",
+        "EmailSentBy":  "brian.fontaine@rsmus.com",
+        "Source":  "Needs Verification"
+    },
+    {
+        "SerialNumber":  "0F33JPG25123PJ",
+        "Model":  "Microsoft Surface Laptop 7",
+        "AssetTag":  "N/A",
+        "AssignedTo":  "Hale Otto",
+        "EmailSentDate":  "2026-03-10 14:04:00",
+        "EmailSentBy":  "brian.fontaine@rsmus.com",
+        "Source":  "Needs Verification"
+    },
+    {
+        "SerialNumber":  "0F33HY925123PJ",
+        "Model":  "Microsoft Surface Laptop 7",
+        "AssetTag":  "N/A",
+        "AssignedTo":  "Mark Thompson",
+        "EmailSentDate":  "2026-03-10 14:04:06",
+        "EmailSentBy":  "brian.fontaine@rsmus.com",
+        "Source":  "Needs Verification"
+    },
+    {
+        "SerialNumber":  "D0G9GLHWY3",
+        "Model":  "Apple MacBook Pro (14-inch, Nov 2023) [M3 Pro]",
+        "AssetTag":  "N/A",
+        "AssignedTo":  "Dimitri Kapetan",
+        "EmailSentDate":  "2026-03-10 14:04:11",
+        "EmailSentBy":  "brian.fontaine@rsmus.com",
+        "Source":  "Needs Verification"
+    },
+    {
+        "SerialNumber":  "0F33JKY25123PJ",
+        "Model":  "Microsoft Surface Laptop 7",
+        "AssetTag":  "N/A",
+        "AssignedTo":  "Jack McMillan",
+        "EmailSentDate":  "2026-03-10 14:04:18",
+        "EmailSentBy":  "brian.fontaine@rsmus.com",
+        "Source":  "Needs Verification"
+    },
+    {
+        "SerialNumber":  "0F33HYT25123PJ",
+        "Model":  "Microsoft Surface Laptop for Business 7th Edition with Intel",
+        "AssetTag":  "N/A",
+        "AssignedTo":  "Chelsea Benson",
+        "EmailSentDate":  "2026-03-10 14:04:26",
+        "EmailSentBy":  "brian.fontaine@rsmus.com",
+        "Source":  "Needs Verification"
+    },
+    {
+        "SerialNumber":  "H5QL2V7QFQ",
+        "Model":  "Apple MacBook Pro (14-inch, 2021)",
+        "AssetTag":  "N/A",
+        "AssignedTo":  "John Rush",
+        "EmailSentDate":  "2026-03-10 14:04:32",
+        "EmailSentBy":  "brian.fontaine@rsmus.com",
+        "Source":  "Needs Verification"
+    },
+    {
+        "SerialNumber":  "002558120857",
+        "Model":  "Microsoft Surface Laptop 4",
+        "AssetTag":  "N/A",
+        "AssignedTo":  "Brett Kerr",
+        "EmailSentDate":  "2026-03-10 14:05:01",
+        "EmailSentBy":  "brian.fontaine@rsmus.com",
+        "Source":  "Needs Verification"
+    },
+    {
+        "SerialNumber":  "JML9L26QKT",
+        "Model":  "Apple MacBook Pro (14-inch, Nov 2023) [M3 Pro]",
+        "AssetTag":  "N/A",
+        "AssignedTo":  "Cia Lindgren",
+        "EmailSentDate":  "2026-03-10 14:05:07",
+        "EmailSentBy":  "brian.fontaine@rsmus.com",
+        "Source":  "Needs Verification"
+    },
+    {
+        "SerialNumber":  "PF5ZBASX",
+        "Model":  "Lenovo ThinkPad T16 Gen 4",
+        "AssetTag":  "N/A",
+        "AssignedTo":  "Varun Reddy",
+        "EmailSentDate":  "2026-03-10 14:05:11",
+        "EmailSentBy":  "brian.fontaine@rsmus.com",
+        "Source":  "Needs Verification"
+    },
+    {
+        "SerialNumber":  "014817713957",
+        "Model":  "Microsoft Surface Laptop 4",
+        "AssetTag":  "N/A",
+        "AssignedTo":  "Kayla Wolfe",
+        "EmailSentDate":  "2026-03-10 14:05:16",
+        "EmailSentBy":  "brian.fontaine@rsmus.com",
+        "Source":  "Needs Verification"
+    },
+    {
+        "SerialNumber":  "0F33JM725123PJ",
+        "Model":  "Microsoft Surface Laptop 7",
+        "AssetTag":  "N/A",
+        "AssignedTo":  "Kyle Smart",
+        "EmailSentDate":  "2026-03-10 14:05:25",
+        "EmailSentBy":  "brian.fontaine@rsmus.com",
+        "Source":  "Needs Verification"
+    },
+    {
+        "SerialNumber":  "034296413757",
+        "Model":  "Microsoft Surface Laptop 4",
+        "AssetTag":  "N/A",
+        "AssignedTo":  "Chris Dragon",
+        "EmailSentDate":  "2026-03-10 14:05:35",
+        "EmailSentBy":  "brian.fontaine@rsmus.com",
+        "Source":  "Needs Verification"
+    },
+    {
+        "SerialNumber":  "KY45J9RR4C",
+        "Model":  "Apple MacBook Pro (14-inch, Nov 2023) [M3 Pro]",
+        "AssetTag":  "N/A",
+        "AssignedTo":  "Yashi Uppalapati",
+        "EmailSentDate":  "2026-03-10 14:05:42",
+        "EmailSentBy":  "brian.fontaine@rsmus.com",
+        "Source":  "Needs Verification"
+    },
+    {
+        "SerialNumber":  "PF3CDT80",
+        "Model":  "Lenovo ThinkPad T14 Gen 2i",
+        "AssetTag":  "N/A",
+        "AssignedTo":  "Stefanie Mindnich",
+        "EmailSentDate":  "2026-03-10 14:05:47",
+        "EmailSentBy":  "brian.fontaine@rsmus.com",
+        "Source":  "Needs Verification"
+    },
+    {
+        "SerialNumber":  "PF61DR0M",
+        "Model":  "Lenovo ThinkPad P16s Gen4",
+        "AssetTag":  "N/A",
+        "AssignedTo":  "Lauren Rosler",
+        "EmailSentDate":  "2026-03-10 14:05:53",
+        "EmailSentBy":  "brian.fontaine@rsmus.com",
+        "Source":  "Needs Verification"
+    },
+    {
+        "SerialNumber":  "028384313857",
+        "Model":  "Microsoft Surface Laptop 4",
+        "AssetTag":  "N/A",
+        "AssignedTo":  "Enrique Gonzalez",
+        "EmailSentDate":  "2026-03-10 14:05:58",
+        "EmailSentBy":  "brian.fontaine@rsmus.com",
+        "Source":  "Needs Verification"
+    },
+    {
+        "SerialNumber":  "PF46ABSV",
+        "Model":  "LENOVO ThinkPad T14 Gen 3",
+        "AssetTag":  "N/A",
+        "AssignedTo":  "Maddi Larsen",
+        "EmailSentDate":  "2026-03-10 14:06:04",
+        "EmailSentBy":  "brian.fontaine@rsmus.com",
+        "Source":  "Needs Verification"
+    },
+    {
+        "SerialNumber":  "G7MWXK44DL",
+        "Model":  "Apple MacBook Pro (14-inch, 2024) M4 Pro",
+        "AssetTag":  "N/A",
+        "AssignedTo":  "Marie McCarthy",
+        "EmailSentDate":  "2026-03-10 14:06:21",
+        "EmailSentBy":  "brian.fontaine@rsmus.com",
+        "Source":  "Needs Verification"
+    },
+    {
+        "SerialNumber":  "PF5ZDMX2",
+        "Model":  "Lenovo ThinkPad T16 AMD Gen 4",
+        "AssetTag":  "N/A",
+        "AssignedTo":  "Nick Roberts",
+        "EmailSentDate":  "2026-03-10 14:06:27",
+        "EmailSentBy":  "brian.fontaine@rsmus.com",
+        "Source":  "Needs Verification"
+    },
+    {
+        "SerialNumber":  "DYD2CRG4T1",
+        "Model":  "Apple MacBook Pro (14-inch, 2024) M4 Pro",
+        "AssetTag":  "N/A",
+        "AssignedTo":  "Trevor Hunter",
+        "EmailSentDate":  "2026-03-10 14:06:32",
+        "EmailSentBy":  "brian.fontaine@rsmus.com",
+        "Source":  "Needs Verification"
+    },
+    {
+        "SerialNumber":  "PF47YB4R",
+        "Model":  "LENOVO ThinkPad T14 Gen 3",
+        "AssetTag":  "N/A",
+        "AssignedTo":  "Stefanie Mindnich",
+        "EmailSentDate":  "2026-03-10 14:06:36",
+        "EmailSentBy":  "brian.fontaine@rsmus.com",
+        "Source":  "Needs Verification"
+    },
+    {
+        "SerialNumber":  "0F36CVK25093PJ",
+        "Model":  "Microsoft Surface Laptop for Business 7th Edition with Intel",
+        "AssetTag":  "N/A",
+        "AssignedTo":  "Brendan Loney",
+        "EmailSentDate":  "2026-03-10 14:06:41",
+        "EmailSentBy":  "brian.fontaine@rsmus.com",
+        "Source":  "Needs Verification"
+    },
+    {
+        "SerialNumber":  "L9KX9PYFMK",
+        "Model":  "Apple MacBook Pro (14-inch, 2024) M4 Pro",
+        "AssetTag":  "N/A",
+        "AssignedTo":  "Michael Forrester",
+        "EmailSentDate":  "2026-03-10 14:06:46",
+        "EmailSentBy":  "brian.fontaine@rsmus.com",
+        "Source":  "Needs Verification"
+    },
+    {
+        "SerialNumber":  "LFFQCFVHCF",
+        "Model":  "Apple MacBook Pro (14-inch, 2024) M4 Pro",
+        "AssetTag":  "N/A",
+        "AssignedTo":  "Jordan Sherman",
+        "EmailSentDate":  "2026-03-10 14:06:51",
+        "EmailSentBy":  "brian.fontaine@rsmus.com",
+        "Source":  "Needs Verification"
+    },
+    {
+        "SerialNumber":  "PF58L3R2",
+        "Model":  "Lenovo ThinkPad T14 AMD Gen5",
+        "AssetTag":  "N/A",
+        "AssignedTo":  "Kennedy Dow",
+        "EmailSentDate":  "2026-03-10 14:06:55",
+        "EmailSentBy":  "brian.fontaine@rsmus.com",
+        "Source":  "Needs Verification"
+    },
+    {
+        "SerialNumber":  "0F33JGT25123PJ",
+        "Model":  "Microsoft Surface Laptop 7",
+        "AssetTag":  "N/A",
+        "AssignedTo":  "Elizabeth Mayr",
+        "EmailSentDate":  "2026-03-10 14:07:02",
+        "EmailSentBy":  "brian.fontaine@rsmus.com",
+        "Source":  "Needs Verification"
+    },
+    {
+        "SerialNumber":  "G4Y0RFK9W7",
+        "Model":  "Apple MacBook Pro (14-inch, 2024) M4 Pro",
+        "AssetTag":  "N/A",
+        "AssignedTo":  "Jordan Gelman",
+        "EmailSentDate":  "2026-03-10 14:07:09",
+        "EmailSentBy":  "brian.fontaine@rsmus.com",
+        "Source":  "Needs Verification"
+    },
+    {
+        "SerialNumber":  "PF482L65",
+        "Model":  "LENOVO ThinkPad T14 Gen 3",
+        "AssetTag":  "N/A",
+        "AssignedTo":  "James Martin III",
+        "EmailSentDate":  "2026-03-10 14:07:14",
+        "EmailSentBy":  "brian.fontaine@rsmus.com",
+        "Source":  "Needs Verification"
+    }
+]
