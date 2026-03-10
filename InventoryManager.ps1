@@ -1,4 +1,4 @@
-# Laptop Inventory Management Application
+﻿# Laptop Inventory Management Application
 # Allows importing CSV, comparing with in-stock inventory, and managing inventory
 
 Add-Type -AssemblyName System.Windows.Forms
@@ -173,9 +173,25 @@ $btnAddToMissing.Size = New-Object System.Drawing.Size(160, 25)
 $btnAddToMissing.Enabled = $false
 $tabImport.Controls.Add($btnAddToMissing)
 
+# Check Ping Button (CSV tab) - separated from load for speed
+$btnCheckPing = New-Object System.Windows.Forms.Button
+$btnCheckPing.Text = "Check Ping"
+$btnCheckPing.Location = New-Object System.Drawing.Point(840, 53)
+$btnCheckPing.Size = New-Object System.Drawing.Size(100, 25)
+$btnCheckPing.Enabled = $false
+$tabImport.Controls.Add($btnCheckPing)
+
+# Run Verification Button (CSV tab)
+$btnRunVerification = New-Object System.Windows.Forms.Button
+$btnRunVerification.Text = "Run Verification"
+$btnRunVerification.Location = New-Object System.Drawing.Point(950, 53)
+$btnRunVerification.Size = New-Object System.Drawing.Size(130, 25)
+$btnRunVerification.Enabled = $false
+$tabImport.Controls.Add($btnRunVerification)
+
 $dgvCsv = New-Object System.Windows.Forms.DataGridView
 $dgvCsv.Location = New-Object System.Drawing.Point(10, 85)
-$dgvCsv.Size = New-Object System.Drawing.Size(1135, 255)
+$dgvCsv.Size = New-Object System.Drawing.Size(1135, 545)
 $dgvCsv.AllowUserToAddRows = $false
 $dgvCsv.AllowUserToDeleteRows = $false
 $dgvCsv.ReadOnly = $true
@@ -199,22 +215,6 @@ $dgvCsv.ContextMenuStrip = $contextMenuCsv
 
 $tabImport.Controls.Add($dgvCsv)
 
-# Comparison Results
-$lblResults = New-Object System.Windows.Forms.Label
-$lblResults.Text = "Comparison Results:"
-$lblResults.Location = New-Object System.Drawing.Point(10, 350)
-$lblResults.Size = New-Object System.Drawing.Size(150, 20)
-$tabImport.Controls.Add($lblResults)
-
-$dgvResults = New-Object System.Windows.Forms.DataGridView
-$dgvResults.Location = New-Object System.Drawing.Point(10, 375)
-$dgvResults.Size = New-Object System.Drawing.Size(1135, 220)
-$dgvResults.AllowUserToAddRows = $false
-$dgvResults.AllowUserToDeleteRows = $false
-$dgvResults.ReadOnly = $true
-$dgvResults.AutoSizeColumnsMode = "Fill"
-$dgvResults.SelectionMode = "FullRowSelect"
-$tabImport.Controls.Add($dgvResults)
 
 # Tab 2: Inventory Management
 $tabInventory = New-Object System.Windows.Forms.TabPage
@@ -565,127 +565,91 @@ $btnLoadCsv.Add_Click({
             $dt.Columns.Add("In AD")        | Out-Null
             $dt.Columns.Add("User in AD?")  | Out-Null
             $dt.Columns.Add("Missing?")     | Out-Null
+            $dt.Columns.Add("Verified")     | Out-Null
 
-            # Show progress message
             $form.Cursor = [System.Windows.Forms.Cursors]::WaitCursor
             $dgvCsv.DataSource = $null
 
-            # Pre-load missing list once for fast lookups
+            # Pre-load missing list once for O(1) lookups
             $currentMissing = Load-MissingLaptops
             $missingSerials = @{}
             foreach ($m in $currentMissing) { $missingSerials[$m.SerialNumber.Trim()] = $true }
 
-            # Add rows and test ping / AD / missing for each
-            $counter = 0
+            # Batch-fetch ALL AD computers in one query and build a hashtable for O(1) lookup
+            $adComputerSet = @{}
+            try {
+                Get-ADComputer -Filter * -Properties Name -ErrorAction Stop | ForEach-Object {
+                    $adComputerSet[$_.Name.ToUpper()] = $true
+                }
+            } catch { }
+
+            # AD user lookup cache - avoids re-querying the same name multiple times
+            $adUserCache = @{}
+
             foreach ($row in $script:csvData) {
-                $counter++
-                Write-Host "Processing $counter of $($script:csvData.Count): $($row.serial_number)"
-                
                 $dr = $dt.NewRow()
                 foreach ($prop in $row.PSObject.Properties) {
                     $dr[$prop.Name] = $prop.Value
                 }
-                
-                # Test ping
-                $pingable = "Offline"
-                try {
-                    $pingTest = Test-Connection -ComputerName $row.serial_number -Count 1 -Quiet -ErrorAction Stop
-                    if ($pingTest -eq $true) {
-                        $pingable = "Online"
-                    }
-                }
-                catch {
-                    if ($_.Exception.Message -like "*could not be resolved*" -or $_.Exception.Message -like "*host not found*") {
-                        $pingable = "DNS Error"
-                    } else {
-                        $pingable = "Offline"
-                    }
-                }
-                $dr["Pingable"] = $pingable
 
-                # Check Active Directory
-                $inAD = "No"
-                try {
-                    Get-ADComputer -Identity $row.serial_number -ErrorAction Stop | Out-Null
-                    $inAD = "Yes"
-                }
-                catch { }
-                $dr["In AD"] = $inAD
+                # Pingable starts as blank - populated on demand via Check Ping button
+                $dr["Pingable"] = "-"
 
-                # Check if assigned user is in Active Directory
-                $userInAD = "No"
+                # In AD - O(1) hashtable lookup, no network call per row
+                $inADVal = if ($adComputerSet.ContainsKey($row.serial_number.ToUpper())) { "Yes" } else { "No" }
+                $dr["In AD"] = $inADVal
+
+                # User in AD? - cached so each unique name is only queried once
                 $assignedUser = if ($row.PSObject.Properties['assigned_to']) { $row.assigned_to.Trim() } else { "" }
                 if (-not [string]::IsNullOrWhiteSpace($assignedUser)) {
-                    $foundUser = $false
-                    $safeName = $assignedUser -replace "'", "''"
+                    if (-not $adUserCache.ContainsKey($assignedUser)) {
+                        $foundUser = $false
+                        $safeName = $assignedUser -replace "'", "''"
 
-                    # 1. Exact DisplayName match
-                    if (-not $foundUser) {
-                        try {
-                            $r = @(Get-ADUser -Filter "DisplayName -eq '$safeName'" -ErrorAction Stop)
-                            if ($r.Count -gt 0) { $foundUser = $true }
-                        } catch { }
+                        if (-not $foundUser) {
+                            try {
+                                $r = @(Get-ADUser -Filter "DisplayName -eq '$safeName'" -ErrorAction Stop)
+                                if ($r.Count -gt 0) { $foundUser = $true }
+                            } catch { }
+                        }
+                        if (-not $foundUser) {
+                            try {
+                                $r = @(Get-ADUser -Filter "Name -eq '$safeName'" -ErrorAction Stop)
+                                if ($r.Count -gt 0) { $foundUser = $true }
+                            } catch { }
+                        }
+                        if (-not $foundUser -and $assignedUser -match ' ') {
+                            try {
+                                $nameParts = $assignedUser -split '\s+', 2
+                                $fn = $nameParts[0].Trim() -replace "'", "''"
+                                $ln = $nameParts[1].Trim() -replace "'", "''"
+                                $r = @(Get-ADUser -Filter "GivenName -eq '$fn' -and Surname -eq '$ln'" -ErrorAction Stop)
+                                if ($r.Count -gt 0) { $foundUser = $true }
+                            } catch { }
+                        }
+                        $adUserCache[$assignedUser] = $foundUser
                     }
-
-                    # 2. Exact Name (CN) match
-                    if (-not $foundUser) {
-                        try {
-                            $r = @(Get-ADUser -Filter "Name -eq '$safeName'" -ErrorAction Stop)
-                            if ($r.Count -gt 0) { $foundUser = $true }
-                        } catch { }
-                    }
-
-                    # 3. Split "First Last" into GivenName + Surname
-                    if (-not $foundUser -and $assignedUser -match ' ') {
-                        try {
-                            $nameParts = $assignedUser -split '\s+', 2
-                            $firstName = $nameParts[0].Trim() -replace "'", "''"
-                            $lastName  = $nameParts[1].Trim() -replace "'", "''"
-                            $r = @(Get-ADUser -Filter "GivenName -eq '$firstName' -and Surname -eq '$lastName'" -ErrorAction Stop)
-                            if ($r.Count -gt 0) { $foundUser = $true }
-                        } catch { }
-                    }
-
-                    # 4. If "Last, First" format, flip and try GivenName + Surname
-                    if (-not $foundUser -and $assignedUser -match ',') {
-                        try {
-                            $parts = $assignedUser -split ',', 2
-                            $firstName = $parts[1].Trim() -replace "'", "''"
-                            $lastName  = $parts[0].Trim() -replace "'", "''"
-                            $r = @(Get-ADUser -Filter "GivenName -eq '$firstName' -and Surname -eq '$lastName'" -ErrorAction Stop)
-                            if ($r.Count -gt 0) { $foundUser = $true }
-                        } catch { }
-                    }
-
-                    Write-Host "User AD check: '$assignedUser' => $foundUser"
-                    $userInAD = if ($foundUser) { "Yes" } else { "No" }
+                    $dr["User in AD?"] = if ($adUserCache[$assignedUser]) { "Yes" } else { "No" }
                 } else {
-                    $userInAD = "N/A"
+                    $dr["User in AD?"] = "N/A"
                 }
-                $dr["User in AD?"] = $userInAD
 
-                # Check missing list
+                # Missing list - O(1) hashtable lookup
                 $dr["Missing?"] = if ($missingSerials.ContainsKey($row.serial_number.Trim())) { "Yes" } else { "No" }
+
+                # Verified - default pending until Run Verification is clicked
+                $dr["Verified"] = "Pending"
 
                 $dt.Rows.Add($dr)
             }
-            
+
             $form.Cursor = [System.Windows.Forms.Cursors]::Default
-            
+
+            # Suspend redraws while binding and colouring
+            $dgvCsv.SuspendLayout()
             $dgvCsv.DataSource = $dt
 
-            # Color code the new and existing status columns
             foreach ($row in $dgvCsv.Rows) {
-                # Pingable
-                $pingStatus = $row.Cells["Pingable"].Value
-                if ($pingStatus -eq "Online") {
-                    $row.Cells["Pingable"].Style.ForeColor = [System.Drawing.Color]::Green
-                } elseif ($pingStatus -eq "Offline") {
-                    $row.Cells["Pingable"].Style.ForeColor = [System.Drawing.Color]::Red
-                } elseif ($pingStatus -eq "DNS Error") {
-                    $row.Cells["Pingable"].Style.ForeColor = [System.Drawing.Color]::DarkOrange
-                }
-
                 # In AD
                 if ($row.Cells["In AD"].Value -eq "Yes") {
                     $row.Cells["In AD"].Style.ForeColor = [System.Drawing.Color]::Green
@@ -702,23 +666,162 @@ $btnLoadCsv.Add_Click({
 
                 # Missing?
                 if ($row.Cells["Missing?"].Value -eq "Yes") {
-                    $row.Cells["Missing?"].Style.ForeColor  = [System.Drawing.Color]::Red
+                    $row.Cells["Missing?"].Style.ForeColor = [System.Drawing.Color]::Red
                     $row.Cells["Missing?"].Style.Font = New-Object System.Drawing.Font($dgvCsv.Font, [System.Drawing.FontStyle]::Bold)
                 } else {
                     $row.Cells["Missing?"].Style.ForeColor = [System.Drawing.Color]::Green
                 }
+
+                # Verified
+                $row.Cells["Verified"].Style.ForeColor = [System.Drawing.Color]::Gray
             }
+
+            $dgvCsv.ResumeLayout()
+
             $btnCompare.Enabled = $true
             $btnAddFromCsv.Enabled = $true
             $btnShowDetailsCsv.Enabled = $true
             $btnEmailCsvUser.Enabled = $true
             $btnAddToMissing.Enabled = $true
-            [System.Windows.Forms.MessageBox]::Show("CSV file loaded successfully! Found $($script:csvData.Count) records.", "Success", "OK", "Information")
+            $btnCheckPing.Enabled = $true
+            $btnRunVerification.Enabled = $true
+            [System.Windows.Forms.MessageBox]::Show("CSV file loaded successfully! Found $($script:csvData.Count) records.`n`nClick 'Check Ping' to test connectivity or 'Run Verification' to verify laptops.", "Success", "OK", "Information")
         }
     }
     catch {
         [System.Windows.Forms.MessageBox]::Show("Error loading CSV file: $($_.Exception.Message)", "Error", "OK", "Error")
     }
+})
+
+# Check Ping button (CSV tab) - on-demand connectivity check
+$btnCheckPing.Add_Click({
+    $dt = $dgvCsv.DataSource
+    if (-not $dt -or $dt.Rows.Count -eq 0) { return }
+
+    $form.Cursor = [System.Windows.Forms.Cursors]::WaitCursor
+    $dgvCsv.SuspendLayout()
+
+    for ($i = 0; $i -lt $script:csvData.Count; $i++) {
+        $serial = $script:csvData[$i].serial_number
+        $pingable = "Offline"
+        try {
+            $pingTest = Test-Connection -ComputerName $serial -Count 1 -Quiet -ErrorAction Stop
+            if ($pingTest -eq $true) { $pingable = "Online" }
+        }
+        catch {
+            if ($_.Exception.Message -like "*could not be resolved*" -or $_.Exception.Message -like "*host not found*") {
+                $pingable = "DNS Error"
+            }
+        }
+        $dt.Rows[$i]["Pingable"] = $pingable
+
+        $cell = $dgvCsv.Rows[$i].Cells["Pingable"]
+        switch ($pingable) {
+            "Online"    { $cell.Style.ForeColor = [System.Drawing.Color]::Green }
+            "Offline"   { $cell.Style.ForeColor = [System.Drawing.Color]::Red }
+            "DNS Error" { $cell.Style.ForeColor = [System.Drawing.Color]::DarkOrange }
+        }
+    }
+
+    $dgvCsv.ResumeLayout()
+    $form.Cursor = [System.Windows.Forms.Cursors]::Default
+
+    $onlineCount = ($script:csvData.Count..1 | ForEach-Object { $dt.Rows[$_ - 1]["Pingable"] } | Where-Object { $_ -eq "Online" }).Count
+    [System.Windows.Forms.MessageBox]::Show("Ping check complete!", "Ping Done", "OK", "Information")
+})
+
+# Run Verification button - checks all CSV rows and marks Verified / Needs Verification
+$btnRunVerification.Add_Click({
+    $dt = $dgvCsv.DataSource
+    if (-not $dt -or $dt.Rows.Count -eq 0) { return }
+
+    $form.Cursor = [System.Windows.Forms.Cursors]::WaitCursor
+
+    # Batch-fetch AD computers with LastLogonDate for O(1) lookups
+    $adComputerInfo = @{}
+    try {
+        Get-ADComputer -Filter * -Properties Name, LastLogonDate -ErrorAction Stop | ForEach-Object {
+            $adComputerInfo[$_.Name.ToUpper()] = $_.LastLogonDate
+        }
+    } catch { }
+
+    # Build a set of serial numbers in local inventory (non-loaner, unassigned = in stock)
+    $inventorySerials = @{}
+    $localInventory = @(Load-Inventory)
+    foreach ($item in $localInventory) {
+        if ($item.SerialNumber) {
+            $inventorySerials[$item.SerialNumber.Trim().ToUpper()] = $true
+        }
+    }
+
+    # Reload missing serials
+    $currentMissing = Load-MissingLaptops
+    $missingSerials = @{}
+    foreach ($m in $currentMissing) { $missingSerials[$m.SerialNumber.Trim().ToUpper()] = $true }
+
+    $cutoff = (Get-Date).AddDays(-7)
+    $verifiedCount = 0
+    $needsCount = 0
+
+    $dgvCsv.SuspendLayout()
+
+    for ($i = 0; $i -lt $script:csvData.Count; $i++) {
+        $row = $script:csvData[$i]
+        $serial = $row.serial_number.Trim()
+        $assignedUser = if ($row.PSObject.Properties['assigned_to']) { $row.assigned_to.Trim() } else { "" }
+        $serialUpper = $serial.ToUpper()
+
+        $status = "Needs Verification"
+
+        # Rule 1: Flagged as missing → always Needs Verification
+        if ($missingSerials.ContainsKey($serialUpper)) {
+            $status = "Missing"
+        }
+        # Rule 2: In local inventory with no assigned user → in stock, verified
+        elseif ($inventorySerials.ContainsKey($serialUpper) -and [string]::IsNullOrWhiteSpace($assignedUser)) {
+            $status = "Verified (In Stock)"
+            $verifiedCount++
+        }
+        # Rule 3: In AD with a LastLogonDate within the past 7 days
+        elseif ($adComputerInfo.ContainsKey($serialUpper)) {
+            $lastLogon = $adComputerInfo[$serialUpper]
+            if ($lastLogon -and $lastLogon -gt $cutoff) {
+                $status = "Verified (Active)"
+                $verifiedCount++
+            } else {
+                $status = "Needs Verification"
+                $needsCount++
+            }
+        }
+        else {
+            $needsCount++
+        }
+
+        $dt.Rows[$i]["Verified"] = $status
+
+        $cell = $dgvCsv.Rows[$i].Cells["Verified"]
+        switch -Wildcard ($status) {
+            "Verified*" {
+                $cell.Style.ForeColor = [System.Drawing.Color]::Green
+                $cell.Style.Font = New-Object System.Drawing.Font($dgvCsv.Font, [System.Drawing.FontStyle]::Bold)
+            }
+            "Missing" {
+                $cell.Style.ForeColor = [System.Drawing.Color]::Red
+                $cell.Style.Font = New-Object System.Drawing.Font($dgvCsv.Font, [System.Drawing.FontStyle]::Bold)
+            }
+            default {
+                $cell.Style.ForeColor = [System.Drawing.Color]::DarkOrange
+                $cell.Style.Font = New-Object System.Drawing.Font($dgvCsv.Font, [System.Drawing.FontStyle]::Regular)
+            }
+        }
+    }
+
+    $dgvCsv.ResumeLayout()
+    $form.Cursor = [System.Windows.Forms.Cursors]::Default
+
+    [System.Windows.Forms.MessageBox]::Show(
+        "Verification complete!`n`nVerified: $verifiedCount`nNeeds Verification: $needsCount`nMissing: $($missingSerials.Count)`n`nVerified = Active in AD (logged in within 7 days) or in local stock.`nNeeds Verification = Not recently active in AD.",
+        "Verification Results", "OK", "Information")
 })
 
 # Add selected CSV item(s) to inventory
@@ -862,82 +965,25 @@ $btnAddFromCsv.Add_Click({
 # Compare CSV with Inventory
 $btnCompare.Add_Click({
     try {
-        $results = @()
-        
-        # Get the DataTable from the grid to access Pingable column
-        $csvDataTable = $dgvCsv.DataSource
-        
-        for ($i = 0; $i -lt $script:csvData.Count; $i++) {
-            $csvItem = $script:csvData[$i]
-            $serial = $csvItem.serial_number
-            $inInventory = $script:inventory | Where-Object { $_.SerialNumber -eq $serial }
-            
-            # Get pingable status from the grid
-            $pingable = "Unknown"
-            if ($csvDataTable -and $i -lt $csvDataTable.Rows.Count) {
-                $pingable = $csvDataTable.Rows[$i]["Pingable"]
-            }
-            
-            $result = [PSCustomObject]@{
-                SerialNumber = $serial
-                Model = $csvItem.model
-                Pingable = $pingable
-                CSVStatus = $csvItem.install_status
-                CSVLocation = $csvItem.stockroom
-                InOurInventory = if ($inInventory) { "Yes" } else { "No" }
-                OurLocation = if ($inInventory) { $inInventory.Location } else { "N/A" }
-                IsLoaner = if ($inInventory) { if ($inInventory.IsLoaner) { "Yes" } else { "No" } } else { "N/A" }
-            }
-            $results += $result
-        }
-        
-        # Create DataTable for results
-        $dtResults = New-Object System.Data.DataTable
-        $dtResults.Columns.Add("SerialNumber") | Out-Null
-        $dtResults.Columns.Add("Model") | Out-Null
-        $dtResults.Columns.Add("Pingable") | Out-Null
-        $dtResults.Columns.Add("CSVStatus") | Out-Null
-        $dtResults.Columns.Add("CSVLocation") | Out-Null
-        $dtResults.Columns.Add("InOurInventory") | Out-Null
-        $dtResults.Columns.Add("OurLocation") | Out-Null
-        $dtResults.Columns.Add("IsLoaner") | Out-Null
-        
-        foreach ($result in $results) {
-            $dr = $dtResults.NewRow()
-            $dr["SerialNumber"] = $result.SerialNumber
-            $dr["Model"] = $result.Model
-            $dr["Pingable"] = $result.Pingable
-            $dr["CSVStatus"] = $result.CSVStatus
-            $dr["CSVLocation"] = $result.CSVLocation
-            $dr["InOurInventory"] = $result.InOurInventory
-            $dr["OurLocation"] = $result.OurLocation
-            $dr["IsLoaner"] = $result.IsLoaner
-            $dtResults.Rows.Add($dr)
-        }
-        
-        $dgvResults.DataSource = $dtResults
-        
-        # Highlight rows that are in inventory with green background
-        foreach ($row in $dgvResults.Rows) {
-            if ($row.Cells["InOurInventory"].Value -eq "Yes") {
-                $row.DefaultCellStyle.BackColor = [System.Drawing.Color]::LightGreen
-            }
+        $script:inventory = @(Load-Inventory)
+        $inCount  = 0
+        $outCount = 0
 
-            # Color code Pingable text
-            $pingStatus = $row.Cells["Pingable"].Value
-            if ($pingStatus -eq "Online") {
-                $row.Cells["Pingable"].Style.ForeColor = [System.Drawing.Color]::Green
-            } elseif ($pingStatus -eq "Offline") {
-                $row.Cells["Pingable"].Style.ForeColor = [System.Drawing.Color]::Red
-            } elseif ($pingStatus -eq "DNS Error") {
-                $row.Cells["Pingable"].Style.ForeColor = [System.Drawing.Color]::DarkOrange
+        for ($i = 0; $i -lt $script:csvData.Count; $i++) {
+            $serial = $script:csvData[$i].serial_number
+            $inInventory = $script:inventory | Where-Object { $_.SerialNumber -eq $serial }
+            $row = $dgvCsv.Rows[$i]
+
+            if ($inInventory) {
+                $row.DefaultCellStyle.BackColor = [System.Drawing.Color]::LightGreen
+                $inCount++
+            } else {
+                $row.DefaultCellStyle.BackColor = [System.Drawing.Color]::MistyRose
+                $outCount++
             }
         }
-        
-        $inInventoryCount = ($results | Where-Object { $_.InOurInventory -eq "Yes" }).Count
-        $notInInventoryCount = ($results | Where-Object { $_.InOurInventory -eq "No" }).Count
-        
-        [System.Windows.Forms.MessageBox]::Show("Comparison complete!`n`nIn our inventory: $inInventoryCount`nNot in our inventory: $notInInventoryCount", "Comparison Results", "OK", "Information")
+
+        [System.Windows.Forms.MessageBox]::Show("Comparison complete!`n`nIn our inventory: $inCount`nNot in our inventory: $outCount", "Comparison Results", "OK", "Information")
     }
     catch {
         [System.Windows.Forms.MessageBox]::Show("Error comparing data: $($_.Exception.Message)", "Error", "OK", "Error")
@@ -1454,18 +1500,29 @@ $btnCheckDevice.Add_Click({
         $details += "  Enabled: $($adComputer.Enabled)"
         $details += "  Description: $(if ($adComputer.Description) { $adComputer.Description } else { 'None' })"
         $details += "  Computer Last Logon: $(if ($adComputer.LastLogonDate) { $adComputer.LastLogonDate } else { 'Never' })"
-        
+
+        # Last logged-on user from registry (requires machine to be online)
+        if ($pingResult) {
+            try {
+                $logonUI = Invoke-Command -ComputerName $serial -ScriptBlock {
+                    Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Authentication\LogonUI" -ErrorAction Stop
+                } -ErrorAction Stop
+                $details += "  Last Logged On User: $(if ($logonUI.LastLoggedOnUser) { $logonUI.LastLoggedOnUser } else { 'Unknown' })"
+                $details += "  Last Logged On Display Name: $(if ($logonUI.LastLoggedOnDisplayName) { $logonUI.LastLoggedOnDisplayName } else { 'Unknown' })"
+            } catch { }
+        }
+
         # Get logged-on user
         $details += ""
         $details += "-" * 80
         $details += "LOGGED-ON USER INFORMATION"
         $details += "-" * 80
         $details += ""
-        
+
         if ($pingResult) {
             try {
                 $loggedOnUser = Get-WmiObject -Class Win32_ComputerSystem -ComputerName $serial -ErrorAction Stop
-                
+
                 if ($loggedOnUser.UserName) {
                     $details += "Current User: $($loggedOnUser.UserName)"
                     $details += ""
@@ -1970,18 +2027,29 @@ $btnShowDetailsLoaner.Add_Click({
             $details += "  Enabled: $($adComputer.Enabled)"
             $details += "  Description: $(if ($adComputer.Description) { $adComputer.Description } else { 'None' })"
             $details += "  Computer Last Logon: $(if ($adComputer.LastLogonDate) { $adComputer.LastLogonDate } else { 'Never' })"
-            
+
+            # Last logged-on user from registry (requires machine to be online)
+            if ($pingResult) {
+                try {
+                    $logonUI = Invoke-Command -ComputerName $selectedSerial -ScriptBlock {
+                        Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Authentication\LogonUI" -ErrorAction Stop
+                    } -ErrorAction Stop
+                    $details += "  Last Logged On User: $(if ($logonUI.LastLoggedOnUser) { $logonUI.LastLoggedOnUser } else { 'Unknown' })"
+                    $details += "  Last Logged On Display Name: $(if ($logonUI.LastLoggedOnDisplayName) { $logonUI.LastLoggedOnDisplayName } else { 'Unknown' })"
+                } catch { }
+            }
+
             # Try to get logged-on user
             $details += ""
             $details += "-" * 80
             $details += "LOGGED-ON USER INFORMATION"
             $details += "-" * 80
             $details += ""
-            
+
             if ($pingResult) {
                 try {
                     $loggedOnUser = Get-WmiObject -Class Win32_ComputerSystem -ComputerName $selectedSerial -ErrorAction Stop
-                    
+
                     if ($loggedOnUser.UserName) {
                         $details += "Current User: $($loggedOnUser.UserName)"
                         $details += ""
